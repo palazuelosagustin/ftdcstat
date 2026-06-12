@@ -1,0 +1,8 @@
+ftdcstat
+diagnostic.data/
+diagnostic.data.tar.gz
+all.out
+compact_all.out
+verbose_all.out
+serverStatus.out
+replSetGetStatus
