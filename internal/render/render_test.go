@@ -307,6 +307,34 @@ func TestAllViewIsSingleWideTableAndRepeatsHeader(t *testing.T) {
 	}
 }
 
+func TestVerboseDoesNotChangeAllViewOutput(t *testing.T) {
+	rows := []derive.Row{testRow(0), testRow(1)}
+	var plain, verbose bytes.Buffer
+	if err := Render(&plain, testMetadata(), nil, rows, Options{View: "all"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Render(&verbose, testMetadata(), nil, rows, Options{View: "all", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	if plain.String() != verbose.String() {
+		t.Fatalf("verbose should not change all view output")
+	}
+}
+
+func TestVerboseDoesNotChangeJSONOutput(t *testing.T) {
+	row := testRow(0)
+	var plain, verbose bytes.Buffer
+	if err := Render(&plain, testMetadata(), nil, []derive.Row{row}, Options{View: "all", JSON: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Render(&verbose, testMetadata(), nil, []derive.Row{row}, Options{View: "all", JSON: true, Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	if plain.String() != verbose.String() {
+		t.Fatalf("verbose should not change JSON output")
+	}
+}
+
 func TestServerViewIncludesReplicationAndServerSections(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Render(&buf, testMetadata(), nil, []derive.Row{testRow(0)}, Options{View: "server"}); err != nil {

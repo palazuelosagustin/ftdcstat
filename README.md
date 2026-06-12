@@ -12,7 +12,7 @@ go build -o ftdcstat ./cmd/ftdcstat
 ## Usage
 
 ```bash
-ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|all] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json]
+ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|all] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]
 ```
 
 The input is a directory, not a single FTDC file. The tool discovers
@@ -109,6 +109,13 @@ generic replica-set node labels to real member names. Each row includes grouped
 section objects such as `replication` and `server`; `replication.lagS` contains
 the per-node lag values, `replication.majLagS` contains the majority commit lag,
 and unavailable lag values are `null`.
+
+### `--verbose`
+
+Reserved for future extended metric output. It is accepted on the command line
+but currently does not add columns or change the selected view layout. With the
+present metric set, `--view all --verbose` produces the same table as
+`--view all`.
 
 ## Header
 

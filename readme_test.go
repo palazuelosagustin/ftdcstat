@@ -17,6 +17,7 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 		"--interval",
 		"--from",
 		"--to",
+		"--verbose",
 		"replication | server | system | wiredTiger",
 		"node1=localhost:27000",
 		"primary.optimeDate - member.optimeDate",

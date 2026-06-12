@@ -17,6 +17,7 @@ import (
 type Options struct {
 	View         string
 	JSON         bool
+	Verbose      bool
 	TimeLocation *time.Location
 }
 

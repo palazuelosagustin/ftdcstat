@@ -31,6 +31,16 @@ func TestParseArgsDiskAliasesToSystem(t *testing.T) {
 	}
 }
 
+func TestParseArgsVerbose(t *testing.T) {
+	opts, err := parseArgs([]string{"diagnostic.data", "--verbose"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.Verbose {
+		t.Fatal("expected verbose=true")
+	}
+}
+
 func TestParseArgsFromTo(t *testing.T) {
 	opts, err := parseArgs([]string{"diagnostic.data", "--from", "2026-06-04T19:00:00", "--to", "2026-06-04T20:00:00"})
 	if err != nil {
