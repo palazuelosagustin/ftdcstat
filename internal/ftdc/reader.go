@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"ftdcstat/internal/derive"
@@ -518,6 +519,88 @@ type flatMetric struct {
 	Value int64
 }
 
+var (
+	chunkBlockPool = sync.Pool{
+		New: func() any {
+			return make([]byte, 0, 64*1024)
+		},
+	}
+	flatMetricsPool = sync.Pool{
+		New: func() any {
+			return make([]flatMetric, 0, 256)
+		},
+	}
+)
+
+func readCompressedChunkBlock(payload []byte) (block []byte, expectedSize int, release func(), err error) {
+	if len(payload) < 5 {
+		return nil, 0, nil, errors.New("payload shorter than FTDC header")
+	}
+	expectedSize = int(binary.LittleEndian.Uint32(payload[:4]))
+	zr, err := zlib.NewReader(bytes.NewReader(payload[4:]))
+	if err != nil {
+		return nil, expectedSize, nil, err
+	}
+	defer zr.Close()
+
+	buf := chunkBlockPool.Get().([]byte)
+	buf = buf[:0]
+	if expectedSize > 0 {
+		if cap(buf) < expectedSize {
+			chunkBlockPool.Put(buf)
+			buf = make([]byte, expectedSize)
+		} else {
+			buf = buf[:expectedSize]
+		}
+		if _, err := io.ReadFull(zr, buf); err != nil {
+			chunkBlockPool.Put(buf[:0])
+			return nil, expectedSize, nil, err
+		}
+	} else {
+		var readErr error
+		buf, readErr = readAllGrow(buf, zr)
+		if readErr != nil {
+			chunkBlockPool.Put(buf[:0])
+			return nil, expectedSize, nil, readErr
+		}
+	}
+	release = func() {
+		chunkBlockPool.Put(buf[:0])
+	}
+	return buf, expectedSize, release, nil
+}
+
+func readAllGrow(buf []byte, r io.Reader) ([]byte, error) {
+	for {
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)]
+		}
+		n, err := r.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+		if err == io.EOF {
+			return buf, nil
+		}
+		if err != nil {
+			return buf, err
+		}
+	}
+}
+
+func borrowedFlatMetrics(refDoc bson.D) ([]flatMetric, func()) {
+	buf := flatMetricsPool.Get().([]flatMetric)
+	buf = appendFlattenMetrics(buf[:0], refDoc, "")
+	return buf, func() {
+		flatMetricsPool.Put(buf[:0])
+	}
+}
+
+func setSampleValue(fields []map[string]float64, index int, path string, value float64, capHint int) {
+	if fields[index] == nil {
+		fields[index] = make(map[string]float64, capHint)
+	}
+	fields[index][path] = value
+}
+
 type mergedSampleStream struct {
 	pending model.MetricSample
 	have    bool
@@ -559,19 +642,11 @@ func (m *mergedSampleStream) Flush(sink SampleSink, warnings *[]model.Warning) e
 
 func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts ReaderOptions) ([]model.MetricSample, any, []model.Warning, error) {
 	var warnings []model.Warning
-	if len(payload) < 5 {
-		return nil, nil, warnings, errors.New("payload shorter than FTDC header")
-	}
-	expectedSize := int(binary.LittleEndian.Uint32(payload[:4]))
-	zr, err := zlib.NewReader(bytes.NewReader(payload[4:]))
+	block, expectedSize, releaseBlock, err := readCompressedChunkBlock(payload)
 	if err != nil {
 		return nil, nil, warnings, err
 	}
-	defer zr.Close()
-	block, err := io.ReadAll(zr)
-	if err != nil {
-		return nil, nil, warnings, err
-	}
+	defer releaseBlock()
 	if expectedSize > 0 && expectedSize != len(block) {
 		warnings = append(warnings, model.Warning{Source: source, Message: fmt.Sprintf("chunk uncompressed size header %d differs from actual %d", expectedSize, len(block))})
 	}
@@ -595,7 +670,8 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 	b := binary.LittleEndian.Uint32(block[offset+4 : offset+8])
 	offset += 8
 
-	metrics := flattenMetrics(refDoc, "")
+	metrics, releaseMetrics := borrowedFlatMetrics(refDoc)
+	defer releaseMetrics()
 	metricCount, deltaCount := a, b
 	if int(a) != len(metrics) && int(b) == len(metrics) {
 		metricCount, deltaCount = b, a
@@ -605,16 +681,22 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 		warnings = append(warnings, model.Warning{Source: source, Message: fmt.Sprintf("metric count mismatch: header=%d flattened=%d", metricCount, len(metrics))})
 	}
 
+	keepCount := 0
+	for _, metric := range metrics {
+		if derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes) {
+			keepCount++
+		}
+	}
+
+	sampleCount := int(deltaCount) + 1
+	sampleFields := make([]map[string]float64, sampleCount)
 	reader := bytes.NewReader(block[offset:])
-	values := map[string][]float64{}
 	zeroRun := int64(0)
 	for _, metric := range metrics {
 		keep := derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes)
-		var series []float64
 		current := metric.Value
 		if keep {
-			series = make([]float64, int(deltaCount)+1)
-			series[0] = float64(current)
+			setSampleValue(sampleFields, 0, metric.Path, float64(current), keepCount)
 		}
 		for i := uint32(0); i < deltaCount; i++ {
 			var delta int64
@@ -635,21 +717,15 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 			}
 			current += delta
 			if keep {
-				series[i+1] = float64(current)
+				setSampleValue(sampleFields, int(i)+1, metric.Path, float64(current), keepCount)
 			}
-		}
-		if keep {
-			values[metric.Path] = series
 		}
 	}
-	sampleCount := int(deltaCount) + 1
 	samples := make([]model.MetricSample, 0, sampleCount)
 	for i := 0; i < sampleCount; i++ {
-		fields := make(map[string]float64, len(values))
-		for path, series := range values {
-			if i < len(series) {
-				fields[path] = series[i]
-			}
+		fields := sampleFields[i]
+		if fields == nil {
+			continue
 		}
 		ts := sampleTimestamp(fields)
 		if ts.IsZero() {
@@ -670,19 +746,11 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 
 func decodeMetricChunkMetadata(payload []byte, source string) (any, []model.Warning, error) {
 	var warnings []model.Warning
-	if len(payload) < 5 {
-		return nil, warnings, errors.New("payload shorter than FTDC header")
-	}
-	expectedSize := int(binary.LittleEndian.Uint32(payload[:4]))
-	zr, err := zlib.NewReader(bytes.NewReader(payload[4:]))
+	block, expectedSize, releaseBlock, err := readCompressedChunkBlock(payload)
 	if err != nil {
 		return nil, warnings, err
 	}
-	defer zr.Close()
-	block, err := io.ReadAll(zr)
-	if err != nil {
-		return nil, warnings, err
-	}
+	defer releaseBlock()
 	if expectedSize > 0 && expectedSize != len(block) {
 		warnings = append(warnings, model.Warning{Source: source, Message: fmt.Sprintf("chunk uncompressed size header %d differs from actual %d", expectedSize, len(block))})
 	}
@@ -711,7 +779,10 @@ func sampleTimestamp(fields map[string]float64) time.Time {
 }
 
 func flattenMetrics(value any, prefix string) []flatMetric {
-	var out []flatMetric
+	return appendFlattenMetrics(nil, value, prefix)
+}
+
+func appendFlattenMetrics(out []flatMetric, value any, prefix string) []flatMetric {
 	switch v := value.(type) {
 	case bson.D:
 		for _, elem := range v {
@@ -719,12 +790,12 @@ func flattenMetrics(value any, prefix string) []flatMetric {
 			if prefix != "" {
 				path = prefix + "." + elem.Key
 			}
-			out = append(out, flattenMetrics(elem.Value, path)...)
+			out = appendFlattenMetrics(out, elem.Value, path)
 		}
 	case bson.A:
 		for i, elem := range v {
 			path := strconvPath(prefix, i)
-			out = append(out, flattenMetrics(elem, path)...)
+			out = appendFlattenMetrics(out, elem, path)
 		}
 	case bool:
 		if v {

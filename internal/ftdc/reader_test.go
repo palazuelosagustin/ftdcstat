@@ -248,7 +248,7 @@ func TestStreamFilesMatchesReadFiles(t *testing.T) {
 	}
 }
 
-func buildChunkPayload(t *testing.T, ref bson.D, deltas map[string][]int64) []byte {
+func buildChunkPayload(t testing.TB, ref bson.D, deltas map[string][]int64) []byte {
 	t.Helper()
 	refRaw, err := bson.Marshal(ref)
 	if err != nil {
