@@ -9,11 +9,11 @@ func TestViewNeedsVerboseReplication(t *testing.T) {
 		want    bool
 	}{
 		{"repl", true, true},
-		{"all", true, true},
+		{"summary", true, true},
 		{"server", true, false},
 		{"system", true, false},
 		{"repl", false, false},
-		{"all", false, false},
+		{"summary", false, false},
 	}
 	for _, tc := range cases {
 		if got := ViewNeedsVerboseReplication(tc.view, tc.verbose); got != tc.want {
@@ -29,7 +29,7 @@ func TestRequiredPathsForVerboseReplication(t *testing.T) {
 			t.Fatalf("expected verbose path %q", path)
 		}
 	}
-	plain, _ := RequiredPathsFor("all", false)
+	plain, _ := RequiredPathsFor("summary", false)
 	for _, path := range verboseReplicationPaths {
 		if plain[path] {
 			t.Fatalf("non-verbose should not include %q", path)

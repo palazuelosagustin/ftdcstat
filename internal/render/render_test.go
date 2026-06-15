@@ -254,26 +254,26 @@ func TestProcessMarkerBeforeFirstMetricLineAndRestartMarker(t *testing.T) {
 	}
 }
 
-func TestAllViewIsSingleWideTableAndRepeatsHeader(t *testing.T) {
+func TestSummaryViewIsSingleWideTableAndRepeatsHeader(t *testing.T) {
 	rows := make([]derive.Row, 51)
 	for i := range rows {
 		rows[i] = testRow(i)
 	}
 	var buf bytes.Buffer
-	if err := Render(&buf, testMetadata(), nil, rows, Options{View: "all"}); err != nil {
+	if err := Render(&buf, testMetadata(), nil, rows, Options{View: "summary"}); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
 	if strings.Contains(out, "[summary]") || strings.Contains(out, "[disk]") {
-		t.Fatalf("all view should not be stacked sections:\n%s", out)
+		t.Fatalf("summary view should not be stacked sections:\n%s", out)
 	}
 	if strings.Contains(out, "[server]") || strings.Contains(out, "[wiredTiger]") || strings.Contains(out, "[system]") ||
 		strings.Contains(out, "----") {
-		t.Fatalf("all view should use compact section labels, not old banners:\n%s", out)
+		t.Fatalf("summary view should use compact section labels, not old banners:\n%s", out)
 	}
-	assertAllViewHeaders(t, out, 2)
+	assertSummaryViewHeaders(t, out, 2)
 	if !strings.Contains(out, "wtCache%") || !strings.Contains(out, "user_cpu%") || !strings.Contains(out, "awaitS") {
-		t.Fatalf("all view missing grouped columns:\n%s", out)
+		t.Fatalf("summary view missing grouped columns:\n%s", out)
 	}
 	labelLine, headerLine := firstTableHeader(out)
 	assertSectionOrder(t, labelLine, []string{"replication", "server", "system", "wiredTiger"})
@@ -309,20 +309,20 @@ func TestAllViewIsSingleWideTableAndRepeatsHeader(t *testing.T) {
 
 func TestNonVerboseOutputUnchanged(t *testing.T) {
 	rows := []derive.Row{testRow(0), testRow(1)}
-	var replPlain, allPlain bytes.Buffer
+	var replPlain, summaryPlain bytes.Buffer
 	if err := Render(&replPlain, testMetadata(), nil, rows, Options{View: "repl"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Render(&allPlain, testMetadata(), nil, rows, Options{View: "all"}); err != nil {
+	if err := Render(&summaryPlain, testMetadata(), nil, rows, Options{View: "summary"}); err != nil {
 		t.Fatal(err)
 	}
 	_, replHeader := firstTableHeader(replPlain.String())
-	_, allHeader := firstTableHeader(allPlain.String())
+	_, summaryHeader := firstTableHeader(summaryPlain.String())
 	if strings.Contains(replHeader, "hbMs") || strings.Contains(replHeader, "applyOps/s") {
 		t.Fatalf("non-verbose repl should not include verbose columns:\n%s", replPlain.String())
 	}
-	if strings.Contains(allHeader, "hbMs") || strings.Contains(allHeader, "applyBufMB") {
-		t.Fatalf("non-verbose all should not include verbose columns:\n%s", allPlain.String())
+	if strings.Contains(summaryHeader, "hbMs") || strings.Contains(summaryHeader, "applyBufMB") {
+		t.Fatalf("non-verbose summary should not include verbose columns:\n%s", summaryPlain.String())
 	}
 }
 
@@ -349,17 +349,17 @@ func TestVerboseReplViewIncludesReplicationMetrics(t *testing.T) {
 	}
 }
 
-func TestVerboseAllViewIncludesReplicationMetrics(t *testing.T) {
+func TestVerboseSummaryViewIncludesReplicationMetrics(t *testing.T) {
 	row := verboseReplicationRow(0)
 	var buf bytes.Buffer
-	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "all", Verbose: true}); err != nil {
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary", Verbose: true}); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
 	_, headerLine := firstTableHeader(out)
 	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB"} {
 		if !strings.Contains(headerLine, col) {
-			t.Fatalf("all verbose header missing %s:\n%s", col, out)
+			t.Fatalf("summary verbose header missing %s:\n%s", col, out)
 		}
 	}
 }
@@ -381,7 +381,7 @@ func TestVerboseSystemViewExcludesReplicationMetrics(t *testing.T) {
 func TestVerboseJSONIncludesReplicationMetrics(t *testing.T) {
 	row := verboseReplicationRow(0)
 	var buf bytes.Buffer
-	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "all", JSON: true, Verbose: true}); err != nil {
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary", JSON: true, Verbose: true}); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -469,17 +469,17 @@ func TestTableHeaderDoesNotRepeatBeforeFiftyRows(t *testing.T) {
 		rows[i] = testRow(i)
 	}
 	var buf bytes.Buffer
-	if err := Render(&buf, testMetadata(), nil, rows, Options{View: "all"}); err != nil {
+	if err := Render(&buf, testMetadata(), nil, rows, Options{View: "summary"}); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
 	if got := strings.Count(out, "datetime"); got != 1 {
 		t.Fatalf("header repeated before 50 rendered rows, got %d headers:\n%s", got, out)
 	}
-	assertAllViewHeaders(t, out, 1)
+	assertSummaryViewHeaders(t, out, 1)
 }
 
-func assertAllViewHeaders(t *testing.T, out string, want int) {
+func assertSummaryViewHeaders(t *testing.T, out string, want int) {
 	t.Helper()
 	lines := strings.Split(out, "\n")
 	found := 0
@@ -595,20 +595,20 @@ func TestNumericFormattingByColumnType(t *testing.T) {
 	}
 }
 
-func TestAllAndReplViewsMatchReplicationValues(t *testing.T) {
+func TestSummaryAndReplViewsMatchReplicationValues(t *testing.T) {
 	row := testRow(0)
 	delete(row.Values, "node2")
-	var replBuf, allBuf bytes.Buffer
+	var replBuf, summaryBuf bytes.Buffer
 	if err := Render(&replBuf, testMetadata(), nil, []derive.Row{row}, Options{View: "repl"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Render(&allBuf, testMetadata(), nil, []derive.Row{row}, Options{View: "all"}); err != nil {
+	if err := Render(&summaryBuf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary"}); err != nil {
 		t.Fatal(err)
 	}
 	replValues := replicationDataValues(t, replBuf.String())
-	allValues := replicationDataValues(t, allBuf.String())
-	if !reflect.DeepEqual(replValues, allValues) {
-		t.Fatalf("replication values mismatch:\nrepl=%#v\nall=%#v", replValues, allValues)
+	summaryValues := replicationDataValues(t, summaryBuf.String())
+	if !reflect.DeepEqual(replValues, summaryValues) {
+		t.Fatalf("replication values mismatch:\nrepl=%#v\nsummary=%#v", replValues, summaryValues)
 	}
 }
 
@@ -638,9 +638,9 @@ func replicationDataValues(t *testing.T, out string) map[string]string {
 	return nil
 }
 
-func TestJSONAllViewIncludesMajLagSInReplication(t *testing.T) {
+func TestJSONSummaryViewIncludesMajLagSInReplication(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Render(&buf, testMetadata(), nil, []derive.Row{testRow(0)}, Options{View: "all", JSON: true}); err != nil {
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{testRow(0)}, Options{View: "summary", JSON: true}); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -654,7 +654,7 @@ func TestJSONAllViewIncludesMajLagSInReplication(t *testing.T) {
 		t.Fatalf("replication.majLagS=%#v", replication["majLagS"])
 	}
 	if _, ok := gotRow["repl"]; ok {
-		t.Fatalf("all JSON should not contain repl section: %#v", gotRow)
+		t.Fatalf("summary JSON should not contain repl section: %#v", gotRow)
 	}
 	server := gotRow["server"].(map[string]any)
 	if server["rsState"] != "PRIMARY" {

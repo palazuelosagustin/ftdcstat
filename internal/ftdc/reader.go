@@ -44,7 +44,7 @@ func NewNativeReader() NativeReader {
 }
 
 func DefaultReaderOptions() ReaderOptions {
-	return ReaderOptionsFor("all", false)
+	return ReaderOptionsFor("summary", false)
 }
 
 func ReaderOptionsFor(view string, verbose bool) ReaderOptions {

@@ -12,7 +12,7 @@ go build -o ftdcstat ./cmd/ftdcstat
 ## Usage
 
 ```bash
-ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|all] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]
+ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|summary] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]
 ```
 
 The input is a directory, not a single FTDC file. The tool discovers
@@ -25,34 +25,33 @@ them as one chronological capture.
 
 Required. Path to a MongoDB FTDC diagnostic data directory.
 
-### `--view server|wt|system|repl|all`
+### `--view server|wt|system|repl|summary`
 
-Default: `all`.
+Default: `summary`.
 
 Views:
 
 ```text
-server  Replica-set status plus MongoDB serverStatus counters, latency, queues, connections
-wt      WiredTiger cache, eviction, checkpoint, and ticket metrics
-system  CPU, memory, and disk metrics
-repl    Replica-set lag and replication state
-all     One wide table containing replication, server, system, and WiredTiger columns
+server   Replica-set status plus MongoDB serverStatus counters, latency, queues, connections
+wt       WiredTiger cache, eviction, checkpoint, and ticket metrics
+system   CPU, memory, and disk metrics
+repl     Replica-set lag and replication state
+summary  One wide table containing replication, server, system, and WiredTiger columns
 ```
 
-`summary` is not a supported view. `disk` is accepted as a compatibility alias
-for `system`.
+`disk` is accepted as a compatibility alias for `system`.
 
-`--view all` is intended for horizontal scrolling:
+`--view summary` is intended for horizontal scrolling:
 
 ```bash
-ftdcstat diagnostic.data --view all | less -S
+ftdcstat diagnostic.data --view summary | less -S
 ```
 
 It prints one wide table, one row per display interval, and repeats the compact
 section-label row plus the column header every 50 data rows. The wide table uses
 `|` separators after `datetime` and between logical `replication`, `server`,
 `system`, and `wiredTiger` groups. It avoids the old full-width dashed banner
-lines. The `--view all` section order is:
+lines. The `--view summary` section order is:
 
 ```text
 replication | server | system | wiredTiger
@@ -112,7 +111,7 @@ and unavailable lag values are `null`.
 
 ### `--verbose`
 
-When used with `--view repl` or `--view all`, `--verbose` adds replication
+When used with `--view repl` or `--view summary`, `--verbose` adds replication
 apply/buffer metrics after `majLagS`:
 
 ```text
@@ -139,7 +138,7 @@ counter-derived rates. Normal FTDC file rotations preserve continuity; large
 gaps, process restarts, and counter resets suppress the rate.
 
 FTDC path selection adds only the explicit verbose replication paths when
-`--verbose` is enabled for `--view repl` or `--view all`.
+`--verbose` is enabled for `--view repl` or `--view summary`.
 
 ## Header
 
@@ -213,7 +212,7 @@ PRIMARY SECONDARY RECOVERING STARTUP2 ARBITER UNKNOWN
 
 ### `replication` Section
 
-`replication` is shown before `server` in `--view all`. It is also included with
+`replication` is shown before `server` in `--view summary`. It is also included with
 `--view server`, because replication lag is server/replica-set status data.
 
 ```text
@@ -233,7 +232,7 @@ Sources: `replSetGetStatus.members[].pingMs`,
 `serverStatus.metrics.repl.buffer.apply.count`, and
 `serverStatus.metrics.repl.buffer.apply.sizeBytes`.
 
-With `--verbose` on `--view repl` or `--view all`, the replication columns
+With `--verbose` on `--view repl` or `--view summary`, the replication columns
 continue after `majLagS` in the order shown above.
 
 Table column names are always generic `node1..nodeN` labels, never replica-set
@@ -243,7 +242,7 @@ repeated as a data literal on each row.
 
 `majLagS` is the lag between `serverStatus.repl.lastWrite.lastWriteDate` and
 `serverStatus.repl.lastWrite.majorityWriteDate`, in seconds. It appears after
-the per-node lag columns in `--view all`, `--view server`, and `--view repl`.
+the per-node lag columns in `--view summary`, `--view server`, and `--view repl`.
 
 Lag is calculated per row from that timestamp's `replSetGetStatus` data:
 
@@ -349,7 +348,7 @@ Missing fields render as `-` in terminal output and `null` in JSON.
 `--view repl` is a compatibility alias that renders only the `replication`
 section, including per-node lag columns and `majLagS`. It does not render
 `server`, `system`, or `wiredTiger` columns. `rsState` remains in the `server`
-section when using `--view server` or `--view all`.
+section when using `--view server` or `--view summary`.
 
 ## Numeric Formatting
 
@@ -400,5 +399,5 @@ go test ./...
 Quick smoke test:
 
 ```bash
-./ftdcstat diagnostic.data --view all --interval 43200
+./ftdcstat diagnostic.data --view summary --interval 43200
 ```

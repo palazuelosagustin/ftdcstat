@@ -11,7 +11,7 @@ func ViewNeedsVerboseReplication(view string, verbose bool) bool {
 		return false
 	}
 	switch view {
-	case "repl", "all":
+	case "repl", "summary":
 		return true
 	default:
 		return false

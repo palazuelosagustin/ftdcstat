@@ -10,9 +10,9 @@ import (
 )
 
 func TestDiagnosticDataVerboseReplicationPathsPresent(t *testing.T) {
-	const dir = "../../diagnostic.data"
+	const dir = "../../testdata/diagnostic.data.27000"
 	if _, err := os.Stat(dir); err != nil {
-		t.Skip("diagnostic.data not available")
+		t.Skip("diagnostic.data.27000 not available")
 	}
 	files, _, err := discovery.Discover(dir)
 	if err != nil {

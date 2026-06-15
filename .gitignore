@@ -7,3 +7,4 @@ verbose_all.out
 serverStatus.out
 replSetGetStatus
 outputs/
+testdata/

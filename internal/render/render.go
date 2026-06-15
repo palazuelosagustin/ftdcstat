@@ -59,7 +59,7 @@ func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows
 }
 
 func layoutForView(view string, nodeLabels []string, verbose bool) tableLayout {
-	replVerbose := verbose && (view == "repl" || view == "all")
+	replVerbose := verbose && (view == "repl" || view == "summary")
 	switch view {
 	case "server":
 		return buildLayout(replicationColumns(nodeLabels, false), []namedColumns{
@@ -75,7 +75,7 @@ func layoutForView(view string, nodeLabels []string, verbose bool) tableLayout {
 		})
 	case "repl":
 		return buildLayout(replicationColumns(nodeLabels, replVerbose), nil)
-	case "all":
+	case "summary":
 		return buildLayout(replicationColumns(nodeLabels, replVerbose), []namedColumns{
 			{Name: "server", Columns: columnsForSection("server")},
 			{Name: "system", Columns: columnsForSection("system")},

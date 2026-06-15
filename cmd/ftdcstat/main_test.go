@@ -10,14 +10,18 @@ func TestParseArgsDefaultIntervalIsSixty(t *testing.T) {
 	if opts.Interval != 60 {
 		t.Fatalf("interval=%d", opts.Interval)
 	}
-	if opts.View != "all" {
+	if opts.View != "summary" {
 		t.Fatalf("view=%s", opts.View)
 	}
 }
 
-func TestParseArgsSummaryViewRemoved(t *testing.T) {
-	if _, err := parseArgs([]string{"diagnostic.data", "--view", "summary"}); err == nil {
-		t.Fatal("expected summary view to be rejected")
+func TestParseArgsSummaryViewAccepted(t *testing.T) {
+	opts, err := parseArgs([]string{"diagnostic.data", "--view", "summary"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.View != "summary" {
+		t.Fatalf("view=%s", opts.View)
 	}
 }
 

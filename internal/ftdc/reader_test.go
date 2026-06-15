@@ -179,9 +179,9 @@ func TestNativeReaderFiltersSamplesByTimeRange(t *testing.T) {
 }
 
 func TestSampleDiagnosticDataSmoke(t *testing.T) {
-	root := filepath.Join("..", "..", "diagnostic.data")
+	root := filepath.Join("..", "..", "testdata", "diagnostic.data.27000")
 	if _, err := os.Stat(root); err != nil {
-		t.Skip("diagnostic.data sample directory not present")
+		t.Skip("diagnostic.data.27000 sample directory not present")
 	}
 	files, warnings, err := discovery.Discover(root)
 	if err != nil {
@@ -201,15 +201,19 @@ func TestSampleDiagnosticDataSmoke(t *testing.T) {
 		t.Fatalf("unexpected discovery warnings: %#v", warnings)
 	}
 	if len(capture.Samples) == 0 {
-		t.Fatal("no samples decoded from diagnostic.data")
+		t.Fatal("no samples decoded from diagnostic.data.27000")
 	}
 	if _, ok := capture.Metadata.LatestDoc("buildInfo"); !ok {
-		t.Fatal("expected buildInfo metadata from diagnostic.data")
+		t.Fatal("expected buildInfo metadata from diagnostic.data.27000")
 	}
 }
 
 func TestStreamFilesMatchesReadFiles(t *testing.T) {
-	files, _, err := discovery.Discover("../../diagnostic.data")
+	root := filepath.Join("..", "..", "testdata", "diagnostic.data.27000")
+	if _, err := os.Stat(root); err != nil {
+		t.Skip("diagnostic.data.27000 sample directory not present")
+	}
+	files, _, err := discovery.Discover(root)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,8 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"--view server|wt|system|repl|all",
+		"--view server|wt|system|repl|summary",
+		"Default: `summary`.",
 		"--interval",
 		"--from",
 		"--to",
@@ -36,6 +37,7 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 		"normalized by the available CPU count",
 		"delta(opLatencies.<type>.latency) / delta(opLatencies.<type>.ops) / 1000000",
 		"`--view repl` is a compatibility alias that renders only the `replication`",
+		"`--view summary` is intended for horizontal scrolling",
 		"`replication.majLagS` contains the majority commit lag",
 		"hbMs applyOps/s applyBufCnt applyBufMB",
 		"serverStatus.metrics.repl.apply.ops",

@@ -86,7 +86,7 @@ func main() {
 }
 
 func parseArgs(args []string) (cliOptions, error) {
-	opts := cliOptions{View: "all", Interval: 60}
+	opts := cliOptions{View: "summary", Interval: 60}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
@@ -180,9 +180,9 @@ func parseArgs(args []string) (cliOptions, error) {
 		opts.View = "system"
 	}
 	switch opts.View {
-	case "server", "wt", "system", "repl", "all":
+	case "server", "wt", "system", "repl", "summary":
 	default:
-		return opts, errors.New("--view must be one of server, wt, system, repl, all")
+		return opts, errors.New("--view must be one of server, wt, system, repl, summary")
 	}
 	return opts, nil
 }
@@ -202,7 +202,7 @@ func parseTimeArg(value string) (time.Time, error) {
 }
 
 func usage(w *os.File) {
-	fmt.Fprintln(w, "usage: ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|all] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]")
+	fmt.Fprintln(w, "usage: ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|summary] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]")
 }
 
 func max(a, b int) int {
