@@ -37,6 +37,9 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 		"delta(opLatencies.<type>.latency) / delta(opLatencies.<type>.ops) / 1000000",
 		"`--view repl` is a compatibility alias that renders only the `replication`",
 		"`replication.majLagS` contains the majority commit lag",
+		"hbMs applyOps/s applyBufCnt applyBufMB",
+		"serverStatus.metrics.repl.apply.ops",
+		"serverStatus.metrics.repl.buffer.apply.count",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("README missing %q", want)

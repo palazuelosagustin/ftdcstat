@@ -22,6 +22,10 @@ var metricRegistry = []metricDefinition{
 	{Section: "server", Column: "cLatS", Format: "seconds", JSONName: "cLatS"},
 
 	{Section: "replication", Column: "majLagS", Format: "lag", JSONName: "majLagS"},
+	{Section: "replication", Column: "hbMs", Format: "millis", JSONName: "hbMs"},
+	{Section: "replication", Column: "applyOps/s", Format: "rate", JSONName: "applyOps/s"},
+	{Section: "replication", Column: "applyBufCnt", Format: "integer", JSONName: "applyBufCnt"},
+	{Section: "replication", Column: "applyBufMB", Format: "mib", JSONName: "applyBufMB"},
 
 	{Section: "system", Column: "r/s", Format: "rate", JSONName: "r/s"},
 	{Section: "system", Column: "w/s", Format: "rate", JSONName: "w/s"},
@@ -59,10 +63,13 @@ func columnsForSection(section string) []string {
 	return out
 }
 
-func replicationColumns(nodeLabels []string) []string {
+func replicationColumns(nodeLabels []string, verbose bool) []string {
 	cols := []string{"lagSLabel"}
 	cols = append(cols, nodeLabels...)
 	cols = append(cols, "majLagS")
+	if verbose {
+		cols = append(cols, "hbMs", "applyOps/s", "applyBufCnt", "applyBufMB")
+	}
 	return cols
 }
 

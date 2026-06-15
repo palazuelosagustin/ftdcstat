@@ -3,14 +3,35 @@ package derive
 import "strings"
 
 func RequiredPaths() (map[string]bool, []string) {
+	return RequiredPathsFor("", false)
+}
+
+func ViewNeedsVerboseReplication(view string, verbose bool) bool {
+	if !verbose {
+		return false
+	}
+	switch view {
+	case "repl", "all":
+		return true
+	default:
+		return false
+	}
+}
+
+func RequiredPathsFor(view string, verbose bool) (map[string]bool, []string) {
 	paths := map[string]bool{}
 	for _, path := range exactRequiredPaths {
 		paths[path] = true
 	}
+	if ViewNeedsVerboseReplication(view, verbose) {
+		for _, path := range verboseReplicationPaths {
+			paths[path] = true
+		}
+	}
 	return paths, append([]string(nil), requiredPrefixes...)
 }
 
-func Interesting(path string, exact map[string]bool, prefixes []string) bool {
+func Interesting(path string, exact map[string]bool, prefixes []string, verboseReplication bool) bool {
 	if exact[path] {
 		return true
 	}
@@ -20,12 +41,21 @@ func Interesting(path string, exact map[string]bool, prefixes []string) bool {
 		}
 	}
 	if strings.HasPrefix(path, "replSetGetStatus.members.") {
+		if verboseReplication && strings.HasSuffix(path, ".pingMs") {
+			return true
+		}
 		return strings.HasSuffix(path, ".state") ||
 			strings.HasSuffix(path, ".self") ||
 			strings.HasSuffix(path, ".optimeDate") ||
 			strings.HasSuffix(path, ".optime.ts.t")
 	}
 	return false
+}
+
+var verboseReplicationPaths = []string{
+	"serverStatus.metrics.repl.apply.ops",
+	"serverStatus.metrics.repl.buffer.apply.count",
+	"serverStatus.metrics.repl.buffer.apply.sizeBytes",
 }
 
 var requiredPrefixes = []string{

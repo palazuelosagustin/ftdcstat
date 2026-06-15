@@ -112,10 +112,34 @@ and unavailable lag values are `null`.
 
 ### `--verbose`
 
-Reserved for future extended metric output. It is accepted on the command line
-but currently does not add columns or change the selected view layout. With the
-present metric set, `--view all --verbose` produces the same table as
-`--view all`.
+When used with `--view repl` or `--view all`, `--verbose` adds replication
+apply/buffer metrics after `majLagS`:
+
+```text
+lagS node1 node2 ... nodeN majLagS hbMs applyOps/s applyBufCnt applyBufMB
+```
+
+These metrics are not added for `--view server`, `--view system`, or
+`--view wt`. Non-verbose output is unchanged.
+
+Verbose replication metrics:
+
+```text
+hbMs         average replSetGetStatus.members[].pingMs across members, milliseconds
+applyOps/s   delta(serverStatus.metrics.repl.apply.ops) / elapsed seconds
+applyBufCnt  serverStatus.metrics.repl.buffer.apply.count
+applyBufMB   serverStatus.metrics.repl.buffer.apply.sizeBytes / 1024 / 1024
+```
+
+These correspond to the `metrics.repl.*` fields returned by `serverStatus` in
+mongod. FTDC stores them under the `serverStatus.metrics.repl.*` path prefix.
+
+`applyOps/s` uses the same rate baseline reset rules as `ins/s`, `qry/s`, and other
+counter-derived rates. Normal FTDC file rotations preserve continuity; large
+gaps, process restarts, and counter resets suppress the rate.
+
+FTDC path selection adds only the explicit verbose replication paths when
+`--verbose` is enabled for `--view repl` or `--view all`.
 
 ## Header
 
@@ -198,7 +222,19 @@ node1    replication lag for rsInfo node1 in seconds, derived
 node2    replication lag for rsInfo node2 in seconds, derived
 nodeN    replication lag for rsInfo nodeN in seconds, derived
 majLagS   majority commit lag in seconds, derived
+hbMs      average member ping latency in milliseconds, verbose only
+applyOps/s   replication apply throughput in ops/sec, verbose only
+applyBufCnt replication apply buffer item count, verbose only
+applyBufMB  replication apply buffer size in MiB, verbose only
 ```
+
+Sources: `replSetGetStatus.members[].pingMs`,
+`serverStatus.metrics.repl.apply.ops`,
+`serverStatus.metrics.repl.buffer.apply.count`, and
+`serverStatus.metrics.repl.buffer.apply.sizeBytes`.
+
+With `--verbose` on `--view repl` or `--view all`, the replication columns
+continue after `majLagS` in the order shown above.
 
 Table column names are always generic `node1..nodeN` labels, never replica-set
 hostnames. The real member names are listed in the `rsInfo` header. The leading

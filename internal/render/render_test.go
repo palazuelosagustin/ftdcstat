@@ -307,31 +307,94 @@ func TestAllViewIsSingleWideTableAndRepeatsHeader(t *testing.T) {
 	}
 }
 
-func TestVerboseDoesNotChangeAllViewOutput(t *testing.T) {
+func TestNonVerboseOutputUnchanged(t *testing.T) {
 	rows := []derive.Row{testRow(0), testRow(1)}
-	var plain, verbose bytes.Buffer
-	if err := Render(&plain, testMetadata(), nil, rows, Options{View: "all"}); err != nil {
+	var replPlain, allPlain bytes.Buffer
+	if err := Render(&replPlain, testMetadata(), nil, rows, Options{View: "repl"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Render(&verbose, testMetadata(), nil, rows, Options{View: "all", Verbose: true}); err != nil {
+	if err := Render(&allPlain, testMetadata(), nil, rows, Options{View: "all"}); err != nil {
 		t.Fatal(err)
 	}
-	if plain.String() != verbose.String() {
-		t.Fatalf("verbose should not change all view output")
+	_, replHeader := firstTableHeader(replPlain.String())
+	_, allHeader := firstTableHeader(allPlain.String())
+	if strings.Contains(replHeader, "hbMs") || strings.Contains(replHeader, "applyOps/s") {
+		t.Fatalf("non-verbose repl should not include verbose columns:\n%s", replPlain.String())
+	}
+	if strings.Contains(allHeader, "hbMs") || strings.Contains(allHeader, "applyBufMB") {
+		t.Fatalf("non-verbose all should not include verbose columns:\n%s", allPlain.String())
 	}
 }
 
-func TestVerboseDoesNotChangeJSONOutput(t *testing.T) {
-	row := testRow(0)
-	var plain, verbose bytes.Buffer
-	if err := Render(&plain, testMetadata(), nil, []derive.Row{row}, Options{View: "all", JSON: true}); err != nil {
+func TestVerboseReplViewIncludesReplicationMetrics(t *testing.T) {
+	row := verboseReplicationRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "repl", Verbose: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := Render(&verbose, testMetadata(), nil, []derive.Row{row}, Options{View: "all", JSON: true, Verbose: true}); err != nil {
+	out := buf.String()
+	_, headerLine := firstTableHeader(out)
+	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB"} {
+		if !strings.Contains(headerLine, col) {
+			t.Fatalf("repl verbose header missing %s:\n%s", col, out)
+		}
+	}
+	for _, forbidden := range []string{"term", "applyB/s", "appBufCnt", "appBufMB"} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("repl verbose output should not contain %q:\n%s", forbidden, out)
+		}
+	}
+	if !strings.Contains(headerLine, "lagS node1 node2 majLagS hbMs applyOps/s applyBufCnt applyBufMB") {
+		t.Fatalf("unexpected verbose repl header order:\n%s", headerLine)
+	}
+}
+
+func TestVerboseAllViewIncludesReplicationMetrics(t *testing.T) {
+	row := verboseReplicationRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "all", Verbose: true}); err != nil {
 		t.Fatal(err)
 	}
-	if plain.String() != verbose.String() {
-		t.Fatalf("verbose should not change JSON output")
+	out := buf.String()
+	_, headerLine := firstTableHeader(out)
+	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB"} {
+		if !strings.Contains(headerLine, col) {
+			t.Fatalf("all verbose header missing %s:\n%s", col, out)
+		}
+	}
+}
+
+func TestVerboseSystemViewExcludesReplicationMetrics(t *testing.T) {
+	row := verboseReplicationRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB", "majLagS", "lagS"} {
+		if strings.Contains(out, col) {
+			t.Fatalf("system verbose should not include replication column %q:\n%s", col, out)
+		}
+	}
+}
+
+func TestVerboseJSONIncludesReplicationMetrics(t *testing.T) {
+	row := verboseReplicationRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "all", JSON: true, Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	rows := payload["rows"].([]any)
+	gotRow := rows[0].(map[string]any)
+	replication := gotRow["replication"].(map[string]any)
+	for _, key := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB"} {
+		if _, ok := replication[key]; !ok {
+			t.Fatalf("replication missing %q: %#v", key, replication)
+		}
 	}
 }
 
@@ -519,6 +582,10 @@ func TestNumericFormattingByColumnType(t *testing.T) {
 		{"rLatS", float64(0), "0.000"},
 		{"node1", float64(0), "0.0"},
 		{"node2", float64(12), "12.0"},
+		{"hbMs", float64(15.5), "15.5"},
+		{"applyOps/s", float64(100), "100.0"},
+		{"applyBufCnt", float64(42), "42"},
+		{"applyBufMB", float64(2), "2.0"},
 		{"qry/s", nil, "-"},
 	}
 	for _, tc := range cases {
@@ -772,4 +839,13 @@ func testRow(i int) derive.Row {
 			"psiMemFull/s":     float64(0),
 		},
 	}
+}
+
+func verboseReplicationRow(i int) derive.Row {
+	row := testRow(i)
+	row.Values["hbMs"] = float64(15)
+	row.Values["applyOps/s"] = float64(100)
+	row.Values["applyBufCnt"] = float64(42)
+	row.Values["applyBufMB"] = float64(2)
+	return row
 }
