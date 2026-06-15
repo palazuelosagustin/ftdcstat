@@ -44,7 +44,7 @@ func main() {
 	}
 
 	reader := ftdc.NewNativeReader()
-	readerOpts := ftdc.DefaultReaderOptions()
+	readerOpts := ftdc.ReaderOptionsFor(opts.View, opts.Verbose)
 	readerOpts.TimeRange = opts.Range
 	metadata, metadataWarnings, err := reader.ReadMetadataFiles(files)
 	if err != nil {

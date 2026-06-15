@@ -431,7 +431,34 @@ func fillReplication(row *Row, c calculator, members *replMemberRegistry, reset 
 			}
 		}
 	}
+	if avg, ok := averageMemberPingMs(c.cur); ok {
+		row.Values["hbMs"] = avg
+	}
+	setCurrent(row, "applyBufCnt", c, "serverStatus.metrics.repl.buffer.apply.count")
+	setCurrentMiB(row, "applyBufMB", c, "serverStatus.metrics.repl.buffer.apply.sizeBytes")
+	if !reset {
+		setRate(row, "applyOps/s", c, "serverStatus.metrics.repl.apply.ops")
+	}
 	row.Values["rsState"] = rsState(c.cur)
+}
+
+func averageMemberPingMs(sample model.MetricSample) (float64, bool) {
+	var sum float64
+	var count int
+	for path, value := range sample.Values {
+		if !strings.HasPrefix(path, "replSetGetStatus.members.") || !strings.HasSuffix(path, ".pingMs") {
+			continue
+		}
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		sum += value
+		count++
+	}
+	if count == 0 {
+		return 0, false
+	}
+	return sum / float64(count), true
 }
 
 func processRestart(prev, cur model.MetricSample) bool {

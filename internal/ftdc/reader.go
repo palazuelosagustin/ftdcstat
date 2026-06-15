@@ -30,10 +30,11 @@ type SampleReader interface {
 type SampleSink func(model.MetricSample) error
 
 type ReaderOptions struct {
-	IncludePaths    map[string]bool
-	IncludePrefixes []string
-	MaxSamples      int
-	TimeRange       model.TimeRange
+	IncludePaths       map[string]bool
+	IncludePrefixes    []string
+	VerboseReplication bool
+	MaxSamples         int
+	TimeRange          model.TimeRange
 }
 
 type NativeReader struct{}
@@ -43,8 +44,16 @@ func NewNativeReader() NativeReader {
 }
 
 func DefaultReaderOptions() ReaderOptions {
-	paths, prefixes := derive.RequiredPaths()
-	return ReaderOptions{IncludePaths: paths, IncludePrefixes: prefixes}
+	return ReaderOptionsFor("all", false)
+}
+
+func ReaderOptionsFor(view string, verbose bool) ReaderOptions {
+	paths, prefixes := derive.RequiredPathsFor(view, verbose)
+	return ReaderOptions{
+		IncludePaths:       paths,
+		IncludePrefixes:    prefixes,
+		VerboseReplication: derive.ViewNeedsVerboseReplication(view, verbose),
+	}
 }
 
 func (r NativeReader) ReadMetadataFiles(files []discovery.MetricFile) (model.Metadata, []model.Warning, error) {
@@ -683,7 +692,7 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 
 	keepCount := 0
 	for _, metric := range metrics {
-		if derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes) {
+		if derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes, opts.VerboseReplication) {
 			keepCount++
 		}
 	}
@@ -693,7 +702,7 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 	reader := bytes.NewReader(block[offset:])
 	zeroRun := int64(0)
 	for _, metric := range metrics {
-		keep := derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes)
+		keep := derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes, opts.VerboseReplication)
 		current := metric.Value
 		if keep {
 			setSampleValue(sampleFields, 0, metric.Path, float64(current), keepCount)

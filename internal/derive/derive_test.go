@@ -431,3 +431,109 @@ func TestRowsHandlesMissingFields(t *testing.T) {
 		t.Fatalf("got %d rows", len(rows))
 	}
 }
+
+func TestRowsCalculatesApplyRateAcrossFileBoundaries(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(1748647354, 0, map[string]float64{"serverStatus.metrics.repl.apply.ops": 1000000}),
+		testSample(1748647355, 1, map[string]float64{"serverStatus.metrics.repl.apply.ops": 1000100}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if got := rows[0].Values["applyOps/s"]; got != float64(100) {
+		t.Fatalf("applyOps/s=%v", got)
+	}
+}
+
+func TestRowsResetsApplyRateAcrossLargeGap(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(1749073232, 0, map[string]float64{"serverStatus.metrics.repl.apply.ops": 1000000}),
+		testSample(1749074727, 1, map[string]float64{"serverStatus.metrics.repl.apply.ops": 1000100}),
+	}, Options{IntervalSeconds: 1, GapThreshold: 600 * time.Second})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if rows[0].Marker == "" {
+		t.Fatal("expected gap marker")
+	}
+	if _, ok := rows[0].Values["applyOps/s"]; ok {
+		t.Fatal("applyOps/s should be reset across large gap")
+	}
+}
+
+func TestRowsResetsApplyRateOnCounterReset(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{"serverStatus.metrics.repl.apply.ops": 1000000}),
+		testSample(10, 0, map[string]float64{"serverStatus.metrics.repl.apply.ops": 100}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if _, ok := rows[0].Values["applyOps/s"]; ok {
+		t.Fatal("applyOps/s should be absent after counter reset")
+	}
+}
+
+func TestRowsResetsApplyRateOnProcessRestart(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{"serverStatus.uptime": 100, "serverStatus.metrics.repl.apply.ops": 1000000}),
+		testSample(10, 0, map[string]float64{"serverStatus.uptime": 1, "serverStatus.metrics.repl.apply.ops": 1000100}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if rows[0].ProcessMarker == "" {
+		t.Fatal("expected restart marker")
+	}
+	if _, ok := rows[0].Values["applyOps/s"]; ok {
+		t.Fatal("applyOps/s should be reset after restart")
+	}
+}
+
+func TestRowsAverageMemberPingMs(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{}),
+		testSample(10, 0, map[string]float64{
+			"replSetGetStatus.members.0.pingMs": 10,
+			"replSetGetStatus.members.1.pingMs": 30,
+		}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if got := rows[0].Values["hbMs"]; got != float64(20) {
+		t.Fatalf("hbMs=%v", got)
+	}
+}
+
+func TestRowsAverageMemberPingMsMissing(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{}),
+		testSample(10, 0, map[string]float64{}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if _, ok := rows[0].Values["hbMs"]; ok {
+		t.Fatal("hbMs should be absent when pingMs is missing")
+	}
+}
+
+func TestRowsApplyBufferGauges(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{}),
+		testSample(10, 0, map[string]float64{
+			"serverStatus.metrics.repl.buffer.apply.count":     42,
+			"serverStatus.metrics.repl.buffer.apply.sizeBytes": 2 * 1024 * 1024,
+		}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if got := rows[0].Values["applyBufCnt"]; got != float64(42) {
+		t.Fatalf("applyBufCnt=%v", got)
+	}
+	if got := rows[0].Values["applyBufMB"]; got != float64(2) {
+		t.Fatalf("applyBufMB=%v", got)
+	}
+}

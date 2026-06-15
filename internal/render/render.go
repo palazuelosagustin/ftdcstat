@@ -36,7 +36,7 @@ type tableLayout struct {
 func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows []derive.Row, opts Options) error {
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
 	nodeLabels := replicationNodeLabels(rsInfo, rows)
-	layout := layoutForView(opts.View, nodeLabels)
+	layout := layoutForView(opts.View, nodeLabels, opts.Verbose)
 	loc := opts.TimeLocation
 	if loc == nil {
 		loc = time.UTC
@@ -58,10 +58,11 @@ func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows
 	return nil
 }
 
-func layoutForView(view string, nodeLabels []string) tableLayout {
+func layoutForView(view string, nodeLabels []string, verbose bool) tableLayout {
+	replVerbose := verbose && (view == "repl" || view == "all")
 	switch view {
 	case "server":
-		return buildLayout(replicationColumns(nodeLabels), []namedColumns{
+		return buildLayout(replicationColumns(nodeLabels, false), []namedColumns{
 			{Name: "server", Columns: columnsForSection("server")},
 		})
 	case "wt":
@@ -73,15 +74,15 @@ func layoutForView(view string, nodeLabels []string) tableLayout {
 			{Name: "system", Columns: columnsForSection("system")},
 		})
 	case "repl":
-		return buildLayout(replicationColumns(nodeLabels), nil)
+		return buildLayout(replicationColumns(nodeLabels, replVerbose), nil)
 	case "all":
-		return buildLayout(replicationColumns(nodeLabels), []namedColumns{
+		return buildLayout(replicationColumns(nodeLabels, replVerbose), []namedColumns{
 			{Name: "server", Columns: columnsForSection("server")},
 			{Name: "system", Columns: columnsForSection("system")},
 			{Name: "wiredTiger", Columns: columnsForSection("wiredTiger")},
 		})
 	default:
-		return buildLayout(replicationColumns(nodeLabels), []namedColumns{
+		return buildLayout(replicationColumns(nodeLabels, replVerbose), []namedColumns{
 			{Name: "server", Columns: columnsForSection("server")},
 			{Name: "system", Columns: columnsForSection("system")},
 			{Name: "wiredTiger", Columns: columnsForSection("wiredTiger")},
