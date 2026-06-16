@@ -118,8 +118,15 @@ apply/buffer metrics after `majLagS`:
 lagS node1 node2 ... nodeN majLagS hbMs applyOps/s applyBufCnt applyBufMB
 ```
 
-These metrics are not added for `--view server`, `--view system`, or
-`--view wt`. Non-verbose output is unchanged.
+When used with `--view wt`, `--verbose` expands the WiredTiger columns with
+cache, eviction, checkpoint, ticket, and history store diagnostics:
+
+```text
+wtCache% dirty% cacheMB dirtyMB updatesMB wtRdMB/s wtWrMB/s evict/s appEvict/s evictWalks/s evictBusy/s ckptMS ckptPages/s rdTkt wrTkt hsInsert/s hsRead/s hsWriteMB/s
+```
+
+Verbose WiredTiger columns are not added to `--view summary`; the wide summary
+view remains compact. Non-verbose output is unchanged.
 
 Verbose replication metrics:
 
@@ -139,6 +146,9 @@ gaps, process restarts, and counter resets suppress the rate.
 
 FTDC path selection adds only the explicit verbose replication paths when
 `--verbose` is enabled for `--view repl` or `--view summary`.
+
+For `--view wt --verbose`, FTDC path selection adds only the explicit verbose
+WiredTiger paths needed for the extra columns.
 
 ## Header
 
@@ -290,6 +300,8 @@ If the operation delta is zero, latency is undefined and prints `-`.
 
 ### `wt` View
 
+Default columns:
+
 ```text
 wtCache%    WiredTiger cache used percent, derived
 dirty%      dirty bytes as percent of configured cache, derived
@@ -300,6 +312,87 @@ appEvict/s  application thread eviction/page-read count per second, rate
 ckptMS      most recent WiredTiger checkpoint duration in milliseconds
 rdTkt       WiredTiger read tickets available, raw
 wrTkt       WiredTiger write tickets available, raw
+```
+
+Verbose-only columns for `--view wt --verbose`:
+
+```text
+cacheMB       current WT cache bytes used, converted to MB, derived raw gauge
+dirtyMB       dirty bytes in WT cache, converted to MB, derived raw gauge
+updatesMB     update bytes in WT cache, converted to MB, derived raw gauge
+evictWalks/s  eviction walks per second, rate
+evictBusy/s   pages skipped or blocked because busy, per second, rate
+ckptPages/s   checkpoint pages written per second, rate
+hsInsert/s    history store inserts per second, rate
+hsRead/s      history store reads per second, rate
+hsWriteMB/s   history store bytes written per second, converted to MB/s, rate
+```
+
+`cacheMB`, `dirtyMB`, and `updatesMB` print as integer MB. `wtRdMB/s`,
+`wtWrMB/s`, and `hsWriteMB/s` print with one decimal. WiredTiger verbose paths
+vary across MongoDB and PSMDB versions; unavailable metrics render as `-`.
+
+WiredTiger column sources:
+
+```text
+wtCache%    serverStatus.wiredTiger.cache.bytes currently in the cache
+            / serverStatus.wiredTiger.cache.maximum bytes configured * 100
+dirty%      serverStatus.wiredTiger.cache.tracked dirty bytes in the cache
+            / serverStatus.wiredTiger.cache.maximum bytes configured * 100
+cacheMB     serverStatus.wiredTiger.cache.bytes currently in the cache / 1024 / 1024
+dirtyMB     serverStatus.wiredTiger.cache.tracked dirty bytes in the cache / 1024 / 1024
+updatesMB   first available:
+            serverStatus.wiredTiger.cache.bytes belonging to the updates in the cache
+            serverStatus.wiredTiger.cache.tracked bytes belonging to the updates in the cache
+            serverStatus.wiredTiger.cache.bytes allocated for updates
+            then / 1024 / 1024
+wtRdMB/s    rate(serverStatus.wiredTiger.cache.bytes read into cache) / 1024 / 1024
+wtWrMB/s    rate(serverStatus.wiredTiger.cache.bytes written from cache) / 1024 / 1024
+evict/s     rate sum, first available group:
+            serverStatus.wiredTiger.cache.pages evicted by eviction server
+            serverStatus.wiredTiger.cache.pages evicted by application threads
+            fallback:
+            serverStatus.wiredTiger.cache.pages evicted because they exceeded the in-memory maximum
+            serverStatus.wiredTiger.cache.unmodified pages evicted
+            serverStatus.wiredTiger.cache.modified pages evicted
+            fallback:
+            serverStatus.wiredTiger.cache.eviction server candidate queue empty when topping up
+            serverStatus.wiredTiger.cache.eviction server candidate queue not empty when topping up
+appEvict/s  rate(serverStatus.wiredTiger.cache.application threads page read from disk to cache count)
+evictWalks/s
+            rate sum:
+            serverStatus.wiredTiger.cache.eviction walks started from root of tree
+            serverStatus.wiredTiger.cache.eviction walks started from saved location in tree
+evictBusy/s rate sum:
+            serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted
+            serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of active children on an internal page
+            serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of failure in reconciliation
+            serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of a cache overflow item
+ckptMS      first available:
+            serverStatus.wiredTiger.transaction.transaction checkpoint most recent duration for gathering all handles (usecs)
+            serverStatus.wiredTiger.checkpoint.most recent duration for gathering all handles (usecs)
+            then / 1000
+ckptPages/s first available rate:
+            serverStatus.wiredTiger.transaction.transaction checkpoint pages written
+            serverStatus.wiredTiger.checkpoint-cleanup.pages written
+            serverStatus.wiredTiger.checkpoint.number of pages caused to be reconciled
+rdTkt       first available:
+            serverStatus.wiredTiger.concurrentTransactions.read.available
+            serverStatus.queues.execution.read.available
+wrTkt       first available:
+            serverStatus.wiredTiger.concurrentTransactions.write.available
+            serverStatus.queues.execution.write.available
+hsInsert/s  first available rate:
+            serverStatus.wiredTiger.cache.history store table insert calls
+            serverStatus.wiredTiger.history store.history store table insert calls
+hsRead/s    first available rate:
+            serverStatus.wiredTiger.cache.history store table read calls
+            serverStatus.wiredTiger.cache.history store table reads
+            serverStatus.wiredTiger.history store.history store table read calls
+hsWriteMB/s first available rate:
+            serverStatus.wiredTiger.cache.bytes written from cache into history store
+            serverStatus.wiredTiger.history store.history store table bytes written
+            then / 1024 / 1024
 ```
 
 ### `system` View

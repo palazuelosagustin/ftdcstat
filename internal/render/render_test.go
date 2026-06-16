@@ -378,6 +378,117 @@ func TestVerboseSystemViewExcludesReplicationMetrics(t *testing.T) {
 	}
 }
 
+func TestWiredTigerViewKeepsCompactDefaultColumns(t *testing.T) {
+	row := verboseWiredTigerRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "wt"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	labelLine, headerLine := firstTableHeader(out)
+	if !strings.Contains(labelLine, "wiredTiger") {
+		t.Fatalf("wt default output missing wiredTiger section label:\n%s", out)
+	}
+	for _, col := range []string{"wtCache%", "dirty%", "wtRdMB/s", "wtWrMB/s", "evict/s", "appEvict/s", "ckptMS", "rdTkt", "wrTkt"} {
+		if !strings.Contains(headerLine, col) {
+			t.Fatalf("wt default header missing %s:\n%s", col, out)
+		}
+	}
+	for _, col := range []string{"cacheMB", "dirtyMB", "updatesMB", "evictWalks/s", "evictBusy/s", "ckptPages/s", "hsInsert/s", "hsRead/s", "hsWriteMB/s"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("wt default header should not include verbose column %s:\n%s", col, out)
+		}
+	}
+}
+
+func TestVerboseWiredTigerViewIncludesVerboseColumns(t *testing.T) {
+	row := verboseWiredTigerRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "wt", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	labelLine, headerLine := firstTableHeader(out)
+	if !strings.Contains(labelLine, "wiredTiger") {
+		t.Fatalf("wt verbose output missing wiredTiger section label:\n%s", out)
+	}
+	headerText := normalizedTableLine(headerLine)
+	wantOrder := "wtCache% dirty% cacheMB dirtyMB updatesMB wtRdMB/s wtWrMB/s evict/s appEvict/s evictWalks/s evictBusy/s ckptMS ckptPages/s rdTkt wrTkt hsInsert/s hsRead/s hsWriteMB/s"
+	if !strings.Contains(headerText, wantOrder) {
+		t.Fatalf("unexpected wt verbose header order:\n%s", headerLine)
+	}
+	if !strings.Contains(headerText, "rdTkt wrTkt") {
+		t.Fatalf("wt verbose header should keep rdTkt/wrTkt names:\n%s", headerLine)
+	}
+	if strings.Contains(headerLine, "readT") || strings.Contains(headerLine, "writeT") {
+		t.Fatalf("wt verbose header should not rename tickets:\n%s", headerLine)
+	}
+	values := tableRowValues(t, out)
+	for key, want := range map[string]string{
+		"cacheMB":      "512",
+		"dirtyMB":      "10",
+		"updatesMB":    "20",
+		"evictWalks/s": "3.0",
+		"evictBusy/s":  "4.0",
+		"ckptPages/s":  "5.0",
+		"hsInsert/s":   "6.0",
+		"hsRead/s":     "7.0",
+		"hsWriteMB/s":  "8.5",
+		"wtCache%":     "50.0",
+	} {
+		if got := values[key]; got != want {
+			t.Fatalf("%s=%q want %q\n%s", key, got, want, out)
+		}
+	}
+}
+
+func TestSummaryViewKeepsCompactWiredTigerColumnsWhenVerbose(t *testing.T) {
+	row := verboseWiredTigerRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	_, headerLine := firstTableHeader(out)
+	for _, col := range []string{"cacheMB", "dirtyMB", "updatesMB", "evictWalks/s", "evictBusy/s", "ckptPages/s", "hsInsert/s", "hsRead/s", "hsWriteMB/s"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("summary view should keep compact wt columns and exclude %s:\n%s", col, out)
+		}
+	}
+}
+
+func TestVerboseWiredTigerMissingMetricsRenderDash(t *testing.T) {
+	row := testRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "wt", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	values := tableRowValues(t, buf.String())
+	for _, col := range []string{"cacheMB", "dirtyMB", "updatesMB", "evictWalks/s", "evictBusy/s", "ckptPages/s", "hsInsert/s", "hsRead/s", "hsWriteMB/s"} {
+		if got := values[col]; got != "-" {
+			t.Fatalf("%s=%q want '-'\n%s", col, got, buf.String())
+		}
+	}
+}
+
+func TestVerboseWiredTigerHeaderRepeatsAndKeepsCompactSeparators(t *testing.T) {
+	rows := make([]derive.Row, 51)
+	for i := range rows {
+		rows[i] = verboseWiredTigerRow(i)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, rows, Options{View: "wt", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if got := strings.Count(out, "datetime"); got != 2 {
+		t.Fatalf("verbose wt header count=%d want 2:\n%s", got, out)
+	}
+	if strings.Contains(out, "----") || strings.Contains(out, "[wiredTiger]") {
+		t.Fatalf("verbose wt should not restore old banner separators:\n%s", out)
+	}
+}
+
 func TestVerboseJSONIncludesReplicationMetrics(t *testing.T) {
 	row := verboseReplicationRow(0)
 	var buf bytes.Buffer
@@ -520,6 +631,35 @@ func firstTableHeader(out string) (string, string) {
 	return "", ""
 }
 
+func tableRowValues(t *testing.T, out string) map[string]string {
+	t.Helper()
+	_, headerLine := firstTableHeader(out)
+	if headerLine == "" {
+		t.Fatalf("missing table header:\n%s", out)
+	}
+	header := strings.Fields(strings.ReplaceAll(headerLine, "|", ""))
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "2026-06-04T19:00:00Z") {
+			continue
+		}
+		fields := strings.Fields(strings.ReplaceAll(line, "|", ""))
+		if len(fields) != len(header) {
+			t.Fatalf("field count mismatch header=%v row=%v\n%s", header, fields, out)
+		}
+		values := map[string]string{}
+		for i, col := range header {
+			values[col] = fields[i]
+		}
+		return values
+	}
+	t.Fatalf("missing first data row:\n%s", out)
+	return nil
+}
+
+func normalizedTableLine(line string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(line, "|", "")), " ")
+}
+
 func assertSectionOrder(t *testing.T, line string, labels []string) {
 	t.Helper()
 	last := -1
@@ -586,6 +726,12 @@ func TestNumericFormattingByColumnType(t *testing.T) {
 		{"applyOps/s", float64(100), "100.0"},
 		{"applyBufCnt", float64(42), "42"},
 		{"applyBufMB", float64(2), "2.0"},
+		{"cacheMB", float64(512), "512"},
+		{"dirtyMB", float64(10), "10"},
+		{"updatesMB", float64(20), "20"},
+		{"hsWriteMB/s", float64(8.5), "8.5"},
+		{"evictWalks/s", float64(3), "3.0"},
+		{"wtCache%", float64(50), "50.0"},
 		{"qry/s", nil, "-"},
 	}
 	for _, tc := range cases {
@@ -847,5 +993,19 @@ func verboseReplicationRow(i int) derive.Row {
 	row.Values["applyOps/s"] = float64(100)
 	row.Values["applyBufCnt"] = float64(42)
 	row.Values["applyBufMB"] = float64(2)
+	return row
+}
+
+func verboseWiredTigerRow(i int) derive.Row {
+	row := testRow(i)
+	row.Values["cacheMB"] = float64(512)
+	row.Values["dirtyMB"] = float64(10)
+	row.Values["updatesMB"] = float64(20)
+	row.Values["evictWalks/s"] = float64(3)
+	row.Values["evictBusy/s"] = float64(4)
+	row.Values["ckptPages/s"] = float64(5)
+	row.Values["hsInsert/s"] = float64(6)
+	row.Values["hsRead/s"] = float64(7)
+	row.Values["hsWriteMB/s"] = float64(8.5)
 	return row
 }

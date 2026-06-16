@@ -537,3 +537,62 @@ func TestRowsApplyBufferGauges(t *testing.T) {
 		t.Fatalf("applyBufMB=%v", got)
 	}
 }
+
+func TestRowsCalculatesVerboseWiredTigerMetrics(t *testing.T) {
+	prev := testSample(0, 0, map[string]float64{
+		"serverStatus.wiredTiger.cache.bytes currently in the cache":                                                        256 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.maximum bytes configured":                                                            1024 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.tracked dirty bytes in the cache":                                                    32 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.bytes belonging to the updates in the cache":                                         16 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.bytes read into cache":                                                               100 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.bytes written from cache":                                                            200 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.eviction walks started from root of tree":                                            10,
+		"serverStatus.wiredTiger.cache.eviction walks started from saved location in tree":                                  20,
+		"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted":                                    30,
+		"serverStatus.wiredTiger.transaction.transaction checkpoint pages written":                                          100,
+		"serverStatus.wiredTiger.cache.history store table insert calls":                                                    200,
+		"serverStatus.wiredTiger.cache.history store table read calls":                                                      300,
+		"serverStatus.wiredTiger.cache.bytes written from cache into history store":                                         400 * 1024 * 1024,
+		"serverStatus.wiredTiger.transaction.transaction checkpoint most recent duration for gathering all handles (usecs)": 1000,
+	})
+	cur := testSample(10, 0, map[string]float64{
+		"serverStatus.wiredTiger.cache.bytes currently in the cache":                                                        512 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.maximum bytes configured":                                                            1024 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.tracked dirty bytes in the cache":                                                    64 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.bytes belonging to the updates in the cache":                                         32 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.bytes read into cache":                                                               120 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.bytes written from cache":                                                            210 * 1024 * 1024,
+		"serverStatus.wiredTiger.cache.eviction walks started from root of tree":                                            20,
+		"serverStatus.wiredTiger.cache.eviction walks started from saved location in tree":                                  25,
+		"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted":                                    40,
+		"serverStatus.wiredTiger.transaction.transaction checkpoint pages written":                                          140,
+		"serverStatus.wiredTiger.cache.history store table insert calls":                                                    220,
+		"serverStatus.wiredTiger.cache.history store table read calls":                                                      330,
+		"serverStatus.wiredTiger.cache.bytes written from cache into history store":                                         405 * 1024 * 1024,
+		"serverStatus.wiredTiger.transaction.transaction checkpoint most recent duration for gathering all handles (usecs)": 2000,
+	})
+	rows := Rows([]model.MetricSample{prev, cur}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	values := rows[0].Values
+	want := map[string]float64{
+		"cacheMB":      512,
+		"dirtyMB":      64,
+		"updatesMB":    32,
+		"wtRdMB/s":     2,
+		"wtWrMB/s":     1,
+		"evictWalks/s": 1.5,
+		"evictBusy/s":  1,
+		"ckptMS":       2,
+		"ckptPages/s":  4,
+		"hsInsert/s":   2,
+		"hsRead/s":     3,
+		"hsWriteMB/s":  0.5,
+	}
+	for key, wantValue := range want {
+		if got := values[key]; got != wantValue {
+			t.Fatalf("%s=%v want %v", key, got, wantValue)
+		}
+	}
+}

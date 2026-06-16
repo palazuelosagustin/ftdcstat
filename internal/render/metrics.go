@@ -1,10 +1,11 @@
 package render
 
 type metricDefinition struct {
-	Section  string
-	Column   string
-	Format   string
-	JSONName string
+	Section     string
+	Column      string
+	Format      string
+	JSONName    string
+	VerboseOnly bool
 }
 
 var metricRegistry = []metricDefinition{
@@ -44,23 +45,43 @@ var metricRegistry = []metricDefinition{
 
 	{Section: "wiredTiger", Column: "wtCache%", Format: "percent", JSONName: "wtCache%"},
 	{Section: "wiredTiger", Column: "dirty%", Format: "percent", JSONName: "dirty%"},
+	{Section: "wiredTiger", Column: "cacheMB", Format: "integer", JSONName: "cacheMB", VerboseOnly: true},
+	{Section: "wiredTiger", Column: "dirtyMB", Format: "integer", JSONName: "dirtyMB", VerboseOnly: true},
+	{Section: "wiredTiger", Column: "updatesMB", Format: "integer", JSONName: "updatesMB", VerboseOnly: true},
 	{Section: "wiredTiger", Column: "wtRdMB/s", Format: "mib", JSONName: "wtRdMB/s"},
 	{Section: "wiredTiger", Column: "wtWrMB/s", Format: "mib", JSONName: "wtWrMB/s"},
 	{Section: "wiredTiger", Column: "evict/s", Format: "rate", JSONName: "evict/s"},
 	{Section: "wiredTiger", Column: "appEvict/s", Format: "rate", JSONName: "appEvict/s"},
+	{Section: "wiredTiger", Column: "evictWalks/s", Format: "rate", JSONName: "evictWalks/s", VerboseOnly: true},
+	{Section: "wiredTiger", Column: "evictBusy/s", Format: "rate", JSONName: "evictBusy/s", VerboseOnly: true},
 	{Section: "wiredTiger", Column: "ckptMS", Format: "millis", JSONName: "ckptMS"},
+	{Section: "wiredTiger", Column: "ckptPages/s", Format: "rate", JSONName: "ckptPages/s", VerboseOnly: true},
 	{Section: "wiredTiger", Column: "rdTkt", Format: "integer", JSONName: "rdTkt"},
 	{Section: "wiredTiger", Column: "wrTkt", Format: "integer", JSONName: "wrTkt"},
+	{Section: "wiredTiger", Column: "hsInsert/s", Format: "rate", JSONName: "hsInsert/s", VerboseOnly: true},
+	{Section: "wiredTiger", Column: "hsRead/s", Format: "rate", JSONName: "hsRead/s", VerboseOnly: true},
+	{Section: "wiredTiger", Column: "hsWriteMB/s", Format: "mib", JSONName: "hsWriteMB/s", VerboseOnly: true},
 }
 
 func columnsForSection(section string) []string {
 	var out []string
 	for _, def := range metricRegistry {
-		if def.Section == section {
+		if def.Section == section && !def.VerboseOnly {
 			out = append(out, def.Column)
 		}
 	}
 	return out
+}
+
+func wiredTigerColumns(verbose bool) []string {
+	if !verbose {
+		return columnsForSection("wiredTiger")
+	}
+	return []string{
+		"wtCache%", "dirty%", "cacheMB", "dirtyMB", "updatesMB",
+		"wtRdMB/s", "wtWrMB/s", "evict/s", "appEvict/s", "evictWalks/s", "evictBusy/s",
+		"ckptMS", "ckptPages/s", "rdTkt", "wrTkt", "hsInsert/s", "hsRead/s", "hsWriteMB/s",
+	}
 }
 
 func replicationColumns(nodeLabels []string, verbose bool) []string {

@@ -18,6 +18,10 @@ func ViewNeedsVerboseReplication(view string, verbose bool) bool {
 	}
 }
 
+func ViewNeedsVerboseWiredTiger(view string, verbose bool) bool {
+	return verbose && view == "wt"
+}
+
 func RequiredPathsFor(view string, verbose bool) (map[string]bool, []string) {
 	paths := map[string]bool{}
 	for _, path := range exactRequiredPaths {
@@ -25,6 +29,11 @@ func RequiredPathsFor(view string, verbose bool) (map[string]bool, []string) {
 	}
 	if ViewNeedsVerboseReplication(view, verbose) {
 		for _, path := range verboseReplicationPaths {
+			paths[path] = true
+		}
+	}
+	if ViewNeedsVerboseWiredTiger(view, verbose) {
+		for _, path := range verboseWiredTigerPaths {
 			paths[path] = true
 		}
 	}
@@ -56,6 +65,29 @@ var verboseReplicationPaths = []string{
 	"serverStatus.metrics.repl.apply.ops",
 	"serverStatus.metrics.repl.buffer.apply.count",
 	"serverStatus.metrics.repl.buffer.apply.sizeBytes",
+}
+
+var verboseWiredTigerPaths = []string{
+	"serverStatus.wiredTiger.cache.bytes belonging to the updates in the cache",
+	"serverStatus.wiredTiger.cache.tracked bytes belonging to the updates in the cache",
+	"serverStatus.wiredTiger.cache.bytes allocated for updates",
+	"serverStatus.wiredTiger.cache.eviction walks started from root of tree",
+	"serverStatus.wiredTiger.cache.eviction walks started from saved location in tree",
+	"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted",
+	"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of active children on an internal page",
+	"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of failure in reconciliation",
+	"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of a cache overflow item",
+	"serverStatus.wiredTiger.checkpoint.most recent duration for gathering all handles (usecs)",
+	"serverStatus.wiredTiger.transaction.transaction checkpoint pages written",
+	"serverStatus.wiredTiger.checkpoint-cleanup.pages written",
+	"serverStatus.wiredTiger.checkpoint.number of pages caused to be reconciled",
+	"serverStatus.wiredTiger.cache.history store table insert calls",
+	"serverStatus.wiredTiger.history store.history store table insert calls",
+	"serverStatus.wiredTiger.cache.history store table read calls",
+	"serverStatus.wiredTiger.cache.history store table reads",
+	"serverStatus.wiredTiger.history store.history store table read calls",
+	"serverStatus.wiredTiger.cache.bytes written from cache into history store",
+	"serverStatus.wiredTiger.history store.history store table bytes written",
 }
 
 var requiredPrefixes = []string{

@@ -43,6 +43,27 @@ func TestRequiredPathsForVerboseReplication(t *testing.T) {
 	}
 }
 
+func TestRequiredPathsForVerboseWiredTiger(t *testing.T) {
+	paths, _ := RequiredPathsFor("wt", true)
+	for _, path := range verboseWiredTigerPaths {
+		if !paths[path] {
+			t.Fatalf("expected verbose WiredTiger path %q", path)
+		}
+	}
+	plain, _ := RequiredPathsFor("wt", false)
+	for _, path := range verboseWiredTigerPaths {
+		if plain[path] {
+			t.Fatalf("non-verbose wt should not include %q", path)
+		}
+	}
+	summaryVerbose, _ := RequiredPathsFor("summary", true)
+	for _, path := range verboseWiredTigerPaths {
+		if summaryVerbose[path] {
+			t.Fatalf("summary verbose should not include %q", path)
+		}
+	}
+}
+
 func TestInterestingVerboseReplicationPaths(t *testing.T) {
 	paths, prefixes := RequiredPathsFor("repl", true)
 	if !Interesting("replSetGetStatus.members.0.pingMs", paths, prefixes, true) {

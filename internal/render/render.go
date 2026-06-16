@@ -67,7 +67,7 @@ func layoutForView(view string, nodeLabels []string, verbose bool) tableLayout {
 		})
 	case "wt":
 		return buildLayout(nil, []namedColumns{
-			{Name: "wiredTiger", Columns: columnsForSection("wiredTiger")},
+			{Name: "wiredTiger", Columns: wiredTigerColumns(verbose)},
 		})
 	case "system", "disk":
 		return buildLayout(nil, []namedColumns{
@@ -512,7 +512,7 @@ func renderTable(w io.Writer, rows []derive.Row, cols []string, sections []table
 }
 
 func printGroupLine(w io.Writer, widths []int, sections []tableSection, separators map[int]bool) {
-	if len(sections) <= 1 || len(widths) == 0 {
+	if len(sections) == 0 || len(widths) == 0 {
 		return
 	}
 	positions, lineLen := columnPositions(widths, separators)

@@ -209,6 +209,19 @@ func fillWT(row *Row, c calculator, reset bool) {
 	if dirtyOK && maxOK && maxCache > 0 {
 		row.Values["dirty%"] = dirty / maxCache * 100
 	}
+	if curOK {
+		row.Values["cacheMB"] = curCache / 1024 / 1024
+	}
+	if dirtyOK {
+		row.Values["dirtyMB"] = dirty / 1024 / 1024
+	}
+	if v, ok := c.currentAny(
+		"serverStatus.wiredTiger.cache.bytes belonging to the updates in the cache",
+		"serverStatus.wiredTiger.cache.tracked bytes belonging to the updates in the cache",
+		"serverStatus.wiredTiger.cache.bytes allocated for updates",
+	); ok {
+		row.Values["updatesMB"] = v / 1024 / 1024
+	}
 	if !reset {
 		if v, ok := c.rate("serverStatus.wiredTiger.cache.bytes read into cache"); ok {
 			row.Values["wtRdMB/s"] = v / 1024 / 1024
@@ -234,8 +247,39 @@ func fillWT(row *Row, c calculator, reset bool) {
 			)
 		}
 		setRate(row, "appEvict/s", c, "serverStatus.wiredTiger.cache.application threads page read from disk to cache count")
+		setRateSum(row, "evictWalks/s", c,
+			"serverStatus.wiredTiger.cache.eviction walks started from root of tree",
+			"serverStatus.wiredTiger.cache.eviction walks started from saved location in tree",
+		)
+		setRateSum(row, "evictBusy/s", c,
+			"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted",
+			"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of active children on an internal page",
+			"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of failure in reconciliation",
+			"serverStatus.wiredTiger.cache.pages selected for eviction unable to be evicted because of a cache overflow item",
+		)
+		setRateAny(row, "ckptPages/s", c,
+			"serverStatus.wiredTiger.transaction.transaction checkpoint pages written",
+			"serverStatus.wiredTiger.checkpoint-cleanup.pages written",
+			"serverStatus.wiredTiger.checkpoint.number of pages caused to be reconciled",
+		)
+		setRateAny(row, "hsInsert/s", c,
+			"serverStatus.wiredTiger.cache.history store table insert calls",
+			"serverStatus.wiredTiger.history store.history store table insert calls",
+		)
+		setRateAny(row, "hsRead/s", c,
+			"serverStatus.wiredTiger.cache.history store table read calls",
+			"serverStatus.wiredTiger.cache.history store table reads",
+			"serverStatus.wiredTiger.history store.history store table read calls",
+		)
+		setRateScaledAny(row, "hsWriteMB/s", c, 1024*1024,
+			"serverStatus.wiredTiger.cache.bytes written from cache into history store",
+			"serverStatus.wiredTiger.history store.history store table bytes written",
+		)
 	}
-	if v, ok := c.current("serverStatus.wiredTiger.transaction.transaction checkpoint most recent duration for gathering all handles (usecs)"); ok {
+	if v, ok := c.currentAny(
+		"serverStatus.wiredTiger.transaction.transaction checkpoint most recent duration for gathering all handles (usecs)",
+		"serverStatus.wiredTiger.checkpoint.most recent duration for gathering all handles (usecs)",
+	); ok {
 		row.Values["ckptMS"] = v / 1000
 	}
 	if v, ok := c.currentAny("serverStatus.wiredTiger.concurrentTransactions.read.available", "serverStatus.queues.execution.read.available"); ok {
