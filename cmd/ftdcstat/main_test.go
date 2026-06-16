@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseArgsDefaultIntervalIsSixty(t *testing.T) {
 	opts, err := parseArgs([]string{"diagnostic.data"})
@@ -25,6 +28,16 @@ func TestParseArgsSummaryViewAccepted(t *testing.T) {
 	}
 }
 
+func TestParseArgsAllAliasesToSummary(t *testing.T) {
+	opts, err := parseArgs([]string{"diagnostic.data", "--view", "all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.View != "summary" {
+		t.Fatalf("view=%s", opts.View)
+	}
+}
+
 func TestParseArgsDiskAliasesToSystem(t *testing.T) {
 	opts, err := parseArgs([]string{"diagnostic.data", "--view", "disk"})
 	if err != nil {
@@ -36,12 +49,46 @@ func TestParseArgsDiskAliasesToSystem(t *testing.T) {
 }
 
 func TestParseArgsVerbose(t *testing.T) {
-	opts, err := parseArgs([]string{"diagnostic.data", "--verbose"})
+	opts, err := parseArgs([]string{"diagnostic.data", "--view", "system", "--verbose"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !opts.Verbose {
 		t.Fatal("expected verbose=true")
+	}
+}
+
+func TestParseArgsPressure(t *testing.T) {
+	opts, err := parseArgs([]string{"diagnostic.data", "--view", "system", "--pressure"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.Pressure {
+		t.Fatal("expected pressure=true")
+	}
+}
+
+func TestParseArgsSystemVerbosePressure(t *testing.T) {
+	opts, err := parseArgs([]string{"diagnostic.data", "--view", "system", "--verbose", "--pressure"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.Verbose || !opts.Pressure {
+		t.Fatalf("verbose=%v pressure=%v", opts.Verbose, opts.Pressure)
+	}
+}
+
+func TestParseArgsPressureRequiresSystemView(t *testing.T) {
+	_, err := parseArgs([]string{"diagnostic.data", "--view", "all", "--pressure"})
+	if err == nil || !strings.Contains(err.Error(), "--pressure is only supported for --view system") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestParseArgsVerboseRequiresFocusedView(t *testing.T) {
+	_, err := parseArgs([]string{"diagnostic.data", "--verbose"})
+	if err == nil || !strings.Contains(err.Error(), "--verbose is only supported for --view repl, wt, or system") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

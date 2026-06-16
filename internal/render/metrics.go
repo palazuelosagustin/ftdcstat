@@ -1,11 +1,12 @@
 package render
 
 type metricDefinition struct {
-	Section     string
-	Column      string
-	Format      string
-	JSONName    string
-	VerboseOnly bool
+	Section      string
+	Column       string
+	Format       string
+	JSONName     string
+	VerboseOnly  bool
+	PressureOnly bool
 }
 
 var metricRegistry = []metricDefinition{
@@ -30,11 +31,11 @@ var metricRegistry = []metricDefinition{
 
 	{Section: "system", Column: "r/s", Format: "rate", JSONName: "r/s"},
 	{Section: "system", Column: "w/s", Format: "rate", JSONName: "w/s"},
-	{Section: "system", Column: "rkB/s", Format: "rate", JSONName: "rkB/s"},
-	{Section: "system", Column: "wkB/s", Format: "rate", JSONName: "wkB/s"},
+	{Section: "system", Column: "rkB/s", Format: "rate", JSONName: "rkB/s", VerboseOnly: true},
+	{Section: "system", Column: "wkB/s", Format: "rate", JSONName: "wkB/s", VerboseOnly: true},
+	{Section: "system", Column: "awaitS", Format: "seconds", JSONName: "awaitS"},
 	{Section: "system", Column: "r_awaitS", Format: "seconds", JSONName: "r_awaitS"},
 	{Section: "system", Column: "w_awaitS", Format: "seconds", JSONName: "w_awaitS"},
-	{Section: "system", Column: "awaitS", Format: "seconds", JSONName: "awaitS"},
 	{Section: "system", Column: "aqu-sz", Format: "seconds", JSONName: "aqu-sz"},
 	{Section: "system", Column: "util%", Format: "percent", JSONName: "util%"},
 	{Section: "system", Column: "user_cpu%", Format: "percent", JSONName: "user_cpu%"},
@@ -42,6 +43,14 @@ var metricRegistry = []metricDefinition{
 	{Section: "system", Column: "iowait%", Format: "percent", JSONName: "iowait%"},
 	{Section: "system", Column: "residentMB", Format: "integer", JSONName: "residentMB"},
 	{Section: "system", Column: "virtualMB", Format: "integer", JSONName: "virtualMB"},
+	{Section: "system", Column: "ctxt/s", Format: "rate", JSONName: "ctxt/s", VerboseOnly: true},
+	{Section: "system", Column: "swapIn/s", Format: "rate", JSONName: "swapIn/s", VerboseOnly: true},
+	{Section: "system", Column: "swapOut/s", Format: "rate", JSONName: "swapOut/s", VerboseOnly: true},
+	{Section: "system", Column: "psiCpuSome%", Format: "percent", JSONName: "psiCpuSome%", PressureOnly: true},
+	{Section: "system", Column: "psiMemSome%", Format: "percent", JSONName: "psiMemSome%", PressureOnly: true},
+	{Section: "system", Column: "psiMemFull%", Format: "percent", JSONName: "psiMemFull%", PressureOnly: true},
+	{Section: "system", Column: "psiIoSome%", Format: "percent", JSONName: "psiIoSome%", PressureOnly: true},
+	{Section: "system", Column: "psiIoFull%", Format: "percent", JSONName: "psiIoFull%", PressureOnly: true},
 
 	{Section: "wiredTiger", Column: "wtCache%", Format: "percent", JSONName: "wtCache%"},
 	{Section: "wiredTiger", Column: "dirty%", Format: "percent", JSONName: "dirty%"},
@@ -66,7 +75,7 @@ var metricRegistry = []metricDefinition{
 func columnsForSection(section string) []string {
 	var out []string
 	for _, def := range metricRegistry {
-		if def.Section == section && !def.VerboseOnly {
+		if def.Section == section && !def.VerboseOnly && !def.PressureOnly {
 			out = append(out, def.Column)
 		}
 	}
@@ -81,6 +90,27 @@ func wiredTigerColumns(verbose bool) []string {
 		"wtCache%", "dirty%", "cacheMB", "dirtyMB", "updatesMB",
 		"wtRdMB/s", "wtWrMB/s", "evict/s", "appEvict/s", "evictWalks/s", "evictBusy/s",
 		"ckptMS", "ckptPages/s", "rdTkt", "wrTkt", "hsInsert/s", "hsRead/s", "hsWriteMB/s",
+	}
+}
+
+func systemColumns(verbose bool) []string {
+	cols := []string{"r/s", "w/s"}
+	if verbose {
+		cols = append(cols, "rkB/s", "wkB/s")
+	}
+	cols = append(cols,
+		"awaitS", "r_awaitS", "w_awaitS", "aqu-sz", "util%",
+		"user_cpu%", "system_cpu%", "iowait%", "residentMB", "virtualMB",
+	)
+	if verbose {
+		cols = append(cols, "ctxt/s", "swapIn/s", "swapOut/s")
+	}
+	return cols
+}
+
+func pressureColumns() []string {
+	return []string{
+		"psiCpuSome%", "psiMemSome%", "psiMemFull%", "psiIoSome%", "psiIoFull%",
 	}
 }
 

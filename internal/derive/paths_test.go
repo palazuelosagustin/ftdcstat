@@ -9,7 +9,7 @@ func TestViewNeedsVerboseReplication(t *testing.T) {
 		want    bool
 	}{
 		{"repl", true, true},
-		{"summary", true, true},
+		{"summary", true, false},
 		{"server", true, false},
 		{"system", true, false},
 		{"repl", false, false},
@@ -22,20 +22,44 @@ func TestViewNeedsVerboseReplication(t *testing.T) {
 	}
 }
 
+func TestViewNeedsPressureSystem(t *testing.T) {
+	cases := []struct {
+		view     string
+		pressure bool
+		want     bool
+	}{
+		{"system", true, true},
+		{"summary", true, false},
+		{"all", true, false},
+		{"system", false, false},
+	}
+	for _, tc := range cases {
+		if got := ViewNeedsPressureSystem(tc.view, tc.pressure); got != tc.want {
+			t.Fatalf("ViewNeedsPressureSystem(%q, %v)=%v want %v", tc.view, tc.pressure, got, tc.want)
+		}
+	}
+}
+
 func TestRequiredPathsForVerboseReplication(t *testing.T) {
-	paths, _ := RequiredPathsFor("repl", true)
+	paths, _ := RequiredPathsFor("repl", true, false)
 	for _, path := range verboseReplicationPaths {
 		if !paths[path] {
 			t.Fatalf("expected verbose path %q", path)
 		}
 	}
-	plain, _ := RequiredPathsFor("summary", false)
+	plain, _ := RequiredPathsFor("summary", false, false)
 	for _, path := range verboseReplicationPaths {
 		if plain[path] {
 			t.Fatalf("non-verbose should not include %q", path)
 		}
 	}
-	systemVerbose, _ := RequiredPathsFor("system", true)
+	summaryVerbose, _ := RequiredPathsFor("summary", true, false)
+	for _, path := range verboseReplicationPaths {
+		if summaryVerbose[path] {
+			t.Fatalf("summary should ignore --verbose and not include %q", path)
+		}
+	}
+	systemVerbose, _ := RequiredPathsFor("system", true, false)
 	for _, path := range verboseReplicationPaths {
 		if systemVerbose[path] {
 			t.Fatalf("system verbose should not include %q", path)
@@ -44,19 +68,19 @@ func TestRequiredPathsForVerboseReplication(t *testing.T) {
 }
 
 func TestRequiredPathsForVerboseWiredTiger(t *testing.T) {
-	paths, _ := RequiredPathsFor("wt", true)
+	paths, _ := RequiredPathsFor("wt", true, false)
 	for _, path := range verboseWiredTigerPaths {
 		if !paths[path] {
 			t.Fatalf("expected verbose WiredTiger path %q", path)
 		}
 	}
-	plain, _ := RequiredPathsFor("wt", false)
+	plain, _ := RequiredPathsFor("wt", false, false)
 	for _, path := range verboseWiredTigerPaths {
 		if plain[path] {
 			t.Fatalf("non-verbose wt should not include %q", path)
 		}
 	}
-	summaryVerbose, _ := RequiredPathsFor("summary", true)
+	summaryVerbose, _ := RequiredPathsFor("summary", true, false)
 	for _, path := range verboseWiredTigerPaths {
 		if summaryVerbose[path] {
 			t.Fatalf("summary verbose should not include %q", path)
@@ -64,8 +88,50 @@ func TestRequiredPathsForVerboseWiredTiger(t *testing.T) {
 	}
 }
 
+func TestRequiredPathsForVerboseSystem(t *testing.T) {
+	paths, _ := RequiredPathsFor("system", true, false)
+	for _, path := range verboseSystemPaths {
+		if !paths[path] {
+			t.Fatalf("expected verbose system path %q", path)
+		}
+	}
+	plain, _ := RequiredPathsFor("system", false, false)
+	for _, path := range verboseSystemPaths {
+		if plain[path] {
+			t.Fatalf("non-verbose system should not include %q", path)
+		}
+	}
+	summaryVerbose, _ := RequiredPathsFor("summary", true, false)
+	for _, path := range verboseSystemPaths {
+		if summaryVerbose[path] {
+			t.Fatalf("summary verbose should not include %q", path)
+		}
+	}
+}
+
+func TestRequiredPathsForPressureSystem(t *testing.T) {
+	paths, _ := RequiredPathsFor("system", false, true)
+	for _, path := range pressureSystemPaths {
+		if !paths[path] {
+			t.Fatalf("expected pressure system path %q", path)
+		}
+	}
+	plain, _ := RequiredPathsFor("system", false, false)
+	for _, path := range pressureSystemPaths {
+		if plain[path] {
+			t.Fatalf("non-pressure system should not include %q", path)
+		}
+	}
+	summaryPressure, _ := RequiredPathsFor("summary", false, true)
+	for _, path := range pressureSystemPaths {
+		if summaryPressure[path] {
+			t.Fatalf("summary pressure should not include %q", path)
+		}
+	}
+}
+
 func TestInterestingVerboseReplicationPaths(t *testing.T) {
-	paths, prefixes := RequiredPathsFor("repl", true)
+	paths, prefixes := RequiredPathsFor("repl", true, false)
 	if !Interesting("replSetGetStatus.members.0.pingMs", paths, prefixes, true) {
 		t.Fatal("expected pingMs to be interesting with verbose replication")
 	}

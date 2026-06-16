@@ -44,11 +44,11 @@ func NewNativeReader() NativeReader {
 }
 
 func DefaultReaderOptions() ReaderOptions {
-	return ReaderOptionsFor("summary", false)
+	return ReaderOptionsFor("summary", false, false)
 }
 
-func ReaderOptionsFor(view string, verbose bool) ReaderOptions {
-	paths, prefixes := derive.RequiredPathsFor(view, verbose)
+func ReaderOptionsFor(view string, verbose, pressure bool) ReaderOptions {
+	paths, prefixes := derive.RequiredPathsFor(view, verbose, pressure)
 	return ReaderOptions{
 		IncludePaths:       paths,
 		IncludePrefixes:    prefixes,

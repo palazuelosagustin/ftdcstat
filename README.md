@@ -12,7 +12,7 @@ go build -o ftdcstat ./cmd/ftdcstat
 ## Usage
 
 ```bash
-ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|summary] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]
+ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|summary|all] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose] [--pressure]
 ```
 
 The input is a directory, not a single FTDC file. The tool discovers
@@ -25,7 +25,7 @@ them as one chronological capture.
 
 Required. Path to a MongoDB FTDC diagnostic data directory.
 
-### `--view server|wt|system|repl|summary`
+### `--view server|wt|system|repl|summary|all`
 
 Default: `summary`.
 
@@ -37,6 +37,7 @@ wt       WiredTiger cache, eviction, checkpoint, and ticket metrics
 system   CPU, memory, and disk metrics
 repl     Replica-set lag and replication state
 summary  One wide table containing replication, server, system, and WiredTiger columns
+all      Compatibility alias for summary
 ```
 
 `disk` is accepted as a compatibility alias for `system`.
@@ -111,8 +112,13 @@ and unavailable lag values are `null`.
 
 ### `--verbose`
 
-When used with `--view repl` or `--view summary`, `--verbose` adds replication
-apply/buffer metrics after `majLagS`:
+`--verbose` expands columns for focused views only. It applies to `--view repl`,
+`--view wt`, and `--view system`. It does not apply to `--view summary` or
+`--view all`, which always print the compact rollup across replication, server,
+system, and WiredTiger.
+
+When used with `--view repl`, `--verbose` adds replication apply/buffer metrics
+after `majLagS`:
 
 ```text
 lagS node1 node2 ... nodeN majLagS hbMs applyOps/s applyBufCnt applyBufMB
@@ -125,8 +131,14 @@ cache, eviction, checkpoint, ticket, and history store diagnostics:
 wtCache% dirty% cacheMB dirtyMB updatesMB wtRdMB/s wtWrMB/s evict/s appEvict/s evictWalks/s evictBusy/s ckptMS ckptPages/s rdTkt wrTkt hsInsert/s hsRead/s hsWriteMB/s
 ```
 
-Verbose WiredTiger columns are not added to `--view summary`; the wide summary
-view remains compact. Non-verbose output is unchanged.
+When used with `--view system`, `--verbose` adds disk throughput, context switch
+rate, and swap activity after the default system columns:
+
+```text
+r/s w/s rkB/s wkB/s awaitS r_awaitS w_awaitS aqu-sz util% user_cpu% system_cpu% iowait% residentMB virtualMB ctxt/s swapIn/s swapOut/s
+```
+
+Non-verbose output for all views is unchanged.
 
 Verbose replication metrics:
 
@@ -145,10 +157,37 @@ counter-derived rates. Normal FTDC file rotations preserve continuity; large
 gaps, process restarts, and counter resets suppress the rate.
 
 FTDC path selection adds only the explicit verbose replication paths when
-`--verbose` is enabled for `--view repl` or `--view summary`.
+`--verbose` is enabled for `--view repl`.
 
 For `--view wt --verbose`, FTDC path selection adds only the explicit verbose
 WiredTiger paths needed for the extra columns.
+
+For `--view system --verbose`, FTDC path selection adds only the explicit
+verbose system paths needed for `ctxt/s`, `swapIn/s`, and `swapOut/s`.
+
+### `--pressure`
+
+`--pressure` is only supported for `--view system`. It appends Linux PSI columns
+in a separate `pressure` section after the system columns:
+
+```text
+psiCpuSome% psiMemSome% psiMemFull% psiIoSome% psiIoFull%
+```
+
+`--view summary`, `--view all`, and other views reject `--pressure` with a clear
+error. `--view summary` and `--view all` remain compact and are not expanded by
+`--pressure`.
+
+For `--view system --pressure`, FTDC path selection adds only the explicit PSI
+paths needed for the pressure columns.
+
+`--verbose` and `--pressure` can be used together on `--view system`. The table
+keeps the verbose system columns in the `system` section and appends the PSI
+columns in a separate `pressure` section:
+
+```text
+r/s w/s rkB/s wkB/s awaitS r_awaitS w_awaitS aqu-sz util% user_cpu% system_cpu% iowait% residentMB virtualMB ctxt/s swapIn/s swapOut/s | psiCpuSome% psiMemSome% psiMemFull% psiIoSome% psiIoFull%
+```
 
 ## Header
 
@@ -242,8 +281,8 @@ Sources: `replSetGetStatus.members[].pingMs`,
 `serverStatus.metrics.repl.buffer.apply.count`, and
 `serverStatus.metrics.repl.buffer.apply.sizeBytes`.
 
-With `--verbose` on `--view repl` or `--view summary`, the replication columns
-continue after `majLagS` in the order shown above.
+With `--verbose` on `--view repl`, the replication columns continue after
+`majLagS` in the order shown above.
 
 Table column names are always generic `node1..nodeN` labels, never replica-set
 hostnames. The real member names are listed in the `rsInfo` header. The leading
@@ -397,24 +436,46 @@ hsWriteMB/s first available rate:
 
 ### `system` View
 
-Disk:
+Default `--view system` columns:
 
 ```text
 r/s         disk reads per second, rate
 w/s         disk writes per second, rate
-rkB/s       disk read throughput in KiB/s, derived
-wkB/s       disk write throughput in KiB/s, derived
+awaitS      average total disk wait in seconds, derived
 r_awaitS    average read wait in seconds, derived
 w_awaitS    average write wait in seconds, derived
-awaitS      average total disk wait in seconds, derived
 aqu-sz      average queue size, derived
 util%       disk utilization percent, derived
 user_cpu%   MongoDB user CPU percent, derived
 system_cpu% MongoDB system CPU percent, derived
 iowait%     OS iowait CPU percent, derived
-residentMB  MongoDB resident memory in MB, raw
-virtualMB   MongoDB virtual memory in MB, raw
+residentMB  MongoDB resident memory in MB, raw integer
+virtualMB   MongoDB virtual memory in MB, raw integer
 ```
+
+Verbose-only columns for `--view system --verbose`:
+
+```text
+rkB/s        disk read throughput in KiB/s, derived rate
+wkB/s        disk write throughput in KiB/s, derived rate
+ctxt/s       context switches per second, derived rate
+swapIn/s     swap-ins per second, derived rate
+swapOut/s    swap-outs per second, derived rate
+```
+
+Pressure-only columns for `--view system --pressure`:
+
+```text
+psiCpuSome%  CPU PSI pressure percent, derived
+psiMemSome%  memory PSI pressure percent, derived
+psiMemFull%  memory full PSI pressure percent, derived
+psiIoSome%   IO PSI pressure percent, derived
+psiIoFull%   IO full PSI pressure percent, derived
+```
+
+With both `--verbose` and `--pressure`, the verbose system columns stay in the
+`system` section and PSI columns are appended in the separate `pressure`
+section shown above.
 
 Disk formulas:
 
@@ -428,11 +489,37 @@ w_awaitS  = delta(write_time_ms) / delta(writes) / 1000
 aqu-sz    = delta(io_queued_ms) / (interval_seconds * 1000)
 ```
 
+`aqu-sz` is average queue size over the row interval, not a per-second rate.
+
 When `serverStatus.extra_info.user_time_us` and
 `serverStatus.extra_info.system_time_us` are available, `user_cpu%` and
 `system_cpu%` are normalized by the available CPU count so the process stays
 within total system capacity. If those counters are absent, `ftdcstat` falls
 back to the FTDC OS CPU split.
+
+System verbose sources:
+
+```text
+ctxt/s       rate(systemMetrics.cpu.ctxt)
+swapIn/s     rate(systemMetrics.vmstat.pswpin)
+swapOut/s    rate(systemMetrics.vmstat.pswpout)
+```
+
+`ctxt/s` is context switches per second from the cumulative Linux context
+switch counter (`/proc/stat` `ctxt` via FTDC `systemMetrics.cpu.ctxt`).
+
+PSI sources:
+
+```text
+psi*%        prefer current avg10 from systemMetrics.pressure.<resource>.<scope>.avg10
+             fallback to avg60 or avg300 if present
+             otherwise derive interval percent from delta(totalMicros) / elapsedMicros * 100
+```
+
+PSI support is Linux-specific and depends on what FTDC captured. When `avg10`
+is present it is used because it is the most useful short-window signal. Older
+MongoDB/PSMDB builds or non-Linux captures may only have `totalMicros` or no
+PSI metrics at all. Missing verbose or pressure metrics render as `-`.
 
 Missing fields render as `-` in terminal output and `null` in JSON.
 

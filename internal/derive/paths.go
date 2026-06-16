@@ -3,7 +3,7 @@ package derive
 import "strings"
 
 func RequiredPaths() (map[string]bool, []string) {
-	return RequiredPathsFor("", false)
+	return RequiredPathsFor("", false, false)
 }
 
 func ViewNeedsVerboseReplication(view string, verbose bool) bool {
@@ -11,7 +11,7 @@ func ViewNeedsVerboseReplication(view string, verbose bool) bool {
 		return false
 	}
 	switch view {
-	case "repl", "summary":
+	case "repl":
 		return true
 	default:
 		return false
@@ -22,7 +22,15 @@ func ViewNeedsVerboseWiredTiger(view string, verbose bool) bool {
 	return verbose && view == "wt"
 }
 
-func RequiredPathsFor(view string, verbose bool) (map[string]bool, []string) {
+func ViewNeedsVerboseSystem(view string, verbose bool) bool {
+	return verbose && view == "system"
+}
+
+func ViewNeedsPressureSystem(view string, pressure bool) bool {
+	return pressure && view == "system"
+}
+
+func RequiredPathsFor(view string, verbose, pressure bool) (map[string]bool, []string) {
 	paths := map[string]bool{}
 	for _, path := range exactRequiredPaths {
 		paths[path] = true
@@ -34,6 +42,16 @@ func RequiredPathsFor(view string, verbose bool) (map[string]bool, []string) {
 	}
 	if ViewNeedsVerboseWiredTiger(view, verbose) {
 		for _, path := range verboseWiredTigerPaths {
+			paths[path] = true
+		}
+	}
+	if ViewNeedsVerboseSystem(view, verbose) {
+		for _, path := range verboseSystemPaths {
+			paths[path] = true
+		}
+	}
+	if ViewNeedsPressureSystem(view, pressure) {
+		for _, path := range pressureSystemPaths {
 			paths[path] = true
 		}
 	}
@@ -88,6 +106,35 @@ var verboseWiredTigerPaths = []string{
 	"serverStatus.wiredTiger.history store.history store table read calls",
 	"serverStatus.wiredTiger.cache.bytes written from cache into history store",
 	"serverStatus.wiredTiger.history store.history store table bytes written",
+}
+
+var verboseSystemPaths = []string{
+	"systemMetrics.cpu.ctxt",
+	"systemMetrics.vmstat.pswpin",
+	"systemMetrics.vmstat.pswpout",
+}
+
+var pressureSystemPaths = []string{
+	"systemMetrics.pressure.cpu.some.avg10",
+	"systemMetrics.pressure.cpu.some.avg60",
+	"systemMetrics.pressure.cpu.some.avg300",
+	"systemMetrics.pressure.cpu.some.totalMicros",
+	"systemMetrics.pressure.memory.some.avg10",
+	"systemMetrics.pressure.memory.some.avg60",
+	"systemMetrics.pressure.memory.some.avg300",
+	"systemMetrics.pressure.memory.some.totalMicros",
+	"systemMetrics.pressure.memory.full.avg10",
+	"systemMetrics.pressure.memory.full.avg60",
+	"systemMetrics.pressure.memory.full.avg300",
+	"systemMetrics.pressure.memory.full.totalMicros",
+	"systemMetrics.pressure.io.some.avg10",
+	"systemMetrics.pressure.io.some.avg60",
+	"systemMetrics.pressure.io.some.avg300",
+	"systemMetrics.pressure.io.some.totalMicros",
+	"systemMetrics.pressure.io.full.avg10",
+	"systemMetrics.pressure.io.full.avg60",
+	"systemMetrics.pressure.io.full.avg300",
+	"systemMetrics.pressure.io.full.totalMicros",
 }
 
 var requiredPrefixes = []string{

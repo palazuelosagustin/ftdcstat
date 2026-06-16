@@ -330,6 +330,14 @@ func fillCPU(row *Row, c calculator, opts Options, reset bool) {
 	} else if total > 0 {
 		row.Values["system_cpu%"] = (cpu["system_ms"] + cpu["irq_ms"] + cpu["softirq_ms"]) / total * 100
 	}
+	setRate(row, "swapIn/s", c, "systemMetrics.vmstat.pswpin")
+	setRate(row, "swapOut/s", c, "systemMetrics.vmstat.pswpout")
+	setRate(row, "ctxt/s", c, "systemMetrics.cpu.ctxt")
+	setPressurePercent(row, "psiCpuSome%", c, "cpu", "some")
+	setPressurePercent(row, "psiMemSome%", c, "memory", "some")
+	setPressurePercent(row, "psiMemFull%", c, "memory", "full")
+	setPressurePercent(row, "psiIoSome%", c, "io", "some")
+	setPressurePercent(row, "psiIoFull%", c, "io", "full")
 }
 
 func fillDisk(row *Row, c calculator, device string, reset bool) {
@@ -627,6 +635,20 @@ func setRateScaledAny(row *Row, key string, c calculator, scale float64, paths .
 	}
 	if v, ok := c.rateAny(paths...); ok {
 		row.Values[key] = v / scale
+	}
+}
+
+func setPressurePercent(row *Row, key string, c calculator, resource, scope string) {
+	if v, ok := c.currentAny(
+		fmt.Sprintf("systemMetrics.pressure.%s.%s.avg10", resource, scope),
+		fmt.Sprintf("systemMetrics.pressure.%s.%s.avg60", resource, scope),
+		fmt.Sprintf("systemMetrics.pressure.%s.%s.avg300", resource, scope),
+	); ok {
+		row.Values[key] = v
+		return
+	}
+	if delta, ok := c.delta(fmt.Sprintf("systemMetrics.pressure.%s.%s.totalMicros", resource, scope)); ok && c.dt > 0 {
+		row.Values[key] = delta / (c.dt * 1_000_000) * 100
 	}
 }
 

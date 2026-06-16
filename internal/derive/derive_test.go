@@ -538,6 +538,87 @@ func TestRowsApplyBufferGauges(t *testing.T) {
 	}
 }
 
+func TestRowsCalculatesVerboseSystemMetrics(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{
+			"systemMetrics.cpu.ctxt":      1000,
+			"systemMetrics.vmstat.pswpin":   10,
+			"systemMetrics.vmstat.pswpout":  20,
+		}),
+		testSample(10, 0, map[string]float64{
+			"systemMetrics.cpu.ctxt":      1200,
+			"systemMetrics.vmstat.pswpin":   20,
+			"systemMetrics.vmstat.pswpout":  50,
+		}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	values := rows[0].Values
+	want := map[string]float64{
+		"ctxt/s":    20,
+		"swapIn/s":  1,
+		"swapOut/s": 3,
+	}
+	for key, wantValue := range want {
+		if got := values[key]; got != wantValue {
+			t.Fatalf("%s=%v want %v", key, got, wantValue)
+		}
+	}
+}
+
+func TestRowsCalculatesPressureSystemMetrics(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{
+			"systemMetrics.pressure.cpu.some.totalMicros":    1000000,
+			"systemMetrics.pressure.memory.some.totalMicros": 2000000,
+			"systemMetrics.pressure.memory.full.totalMicros": 3000000,
+			"systemMetrics.pressure.io.some.totalMicros":     4000000,
+			"systemMetrics.pressure.io.full.totalMicros":     5000000,
+		}),
+		testSample(10, 0, map[string]float64{
+			"systemMetrics.pressure.cpu.some.totalMicros":    2000000,
+			"systemMetrics.pressure.memory.some.totalMicros": 4000000,
+			"systemMetrics.pressure.memory.full.totalMicros": 6000000,
+			"systemMetrics.pressure.io.some.totalMicros":     8000000,
+			"systemMetrics.pressure.io.full.totalMicros":     10000000,
+		}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	values := rows[0].Values
+	want := map[string]float64{
+		"psiCpuSome%":  10,
+		"psiMemSome%":  20,
+		"psiMemFull%":  30,
+		"psiIoSome%":   40,
+		"psiIoFull%":   50,
+	}
+	for key, wantValue := range want {
+		if got := values[key]; got != wantValue {
+			t.Fatalf("%s=%v want %v", key, got, wantValue)
+		}
+	}
+}
+
+func TestRowsCalculatesPressureFromAvg10(t *testing.T) {
+	rows := Rows([]model.MetricSample{
+		testSample(0, 0, map[string]float64{
+			"systemMetrics.pressure.cpu.some.avg10": 12.5,
+		}),
+		testSample(10, 0, map[string]float64{
+			"systemMetrics.pressure.cpu.some.avg10": 15.0,
+		}),
+	}, Options{IntervalSeconds: 1})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	if got := rows[0].Values["psiCpuSome%"]; got != 15.0 {
+		t.Fatalf("psiCpuSome%%=%v want 15", got)
+	}
+}
+
 func TestRowsCalculatesVerboseWiredTigerMetrics(t *testing.T) {
 	prev := testSample(0, 0, map[string]float64{
 		"serverStatus.wiredTiger.cache.bytes currently in the cache":                                                        256 * 1024 * 1024,

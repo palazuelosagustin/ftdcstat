@@ -25,7 +25,7 @@ func TestDiagnosticDataVerboseReplicationPathsPresent(t *testing.T) {
 			break
 		}
 	}
-	opts := ftdc.ReaderOptionsFor("repl", true)
+	opts := ftdc.ReaderOptionsFor("repl", true, false)
 	capture, err := ftdc.NewNativeReader().ReadFiles([]discovery.MetricFile{file}, opts)
 	if err != nil {
 		t.Fatal(err)

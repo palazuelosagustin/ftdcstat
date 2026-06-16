@@ -349,17 +349,37 @@ func TestVerboseReplViewIncludesReplicationMetrics(t *testing.T) {
 	}
 }
 
-func TestVerboseSummaryViewIncludesReplicationMetrics(t *testing.T) {
-	row := verboseReplicationRow(0)
+func TestSummaryViewIgnoresVerboseFlag(t *testing.T) {
+	row := verboseSystemRow(0)
 	var buf bytes.Buffer
 	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary", Verbose: true}); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
 	_, headerLine := firstTableHeader(out)
-	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB"} {
+	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB", "rkB/s", "wkB/s", "ctxt/s", "swapIn/s", "psiCpuSome%"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("summary should ignore --verbose and exclude %s:\n%s", col, out)
+		}
+	}
+}
+
+func TestAllViewKeepsCompactSystemColumns(t *testing.T) {
+	row := verboseSystemRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "all"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	_, headerLine := firstTableHeader(out)
+	for _, col := range []string{"r/s", "w/s", "awaitS", "user_cpu%", "residentMB", "virtualMB"} {
 		if !strings.Contains(headerLine, col) {
-			t.Fatalf("summary verbose header missing %s:\n%s", col, out)
+			t.Fatalf("all view header missing %s:\n%s", col, out)
+		}
+	}
+	for _, col := range []string{"rkB/s", "wkB/s", "ctxt/s", "swapIn/s", "swapOut/s", "psiCpuSome%"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("all view should keep compact system columns and exclude %s:\n%s", col, out)
 		}
 	}
 }
@@ -374,6 +394,186 @@ func TestVerboseSystemViewExcludesReplicationMetrics(t *testing.T) {
 	for _, col := range []string{"hbMs", "applyOps/s", "applyBufCnt", "applyBufMB", "majLagS", "lagS"} {
 		if strings.Contains(out, col) {
 			t.Fatalf("system verbose should not include replication column %q:\n%s", col, out)
+		}
+	}
+}
+
+func TestSystemViewKeepsCompactDefaultColumns(t *testing.T) {
+	row := verboseSystemRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	labelLine, headerLine := firstTableHeader(out)
+	if !strings.Contains(labelLine, "system") {
+		t.Fatalf("system output missing section label:\n%s", out)
+	}
+	for _, col := range []string{"r/s", "w/s", "awaitS", "r_awaitS", "w_awaitS", "aqu-sz", "util%", "user_cpu%", "system_cpu%", "iowait%", "residentMB", "virtualMB"} {
+		if !strings.Contains(headerLine, col) {
+			t.Fatalf("system default header missing %s:\n%s", col, out)
+		}
+	}
+	for _, col := range []string{"rkB/s", "wkB/s", "ctxt/s", "swapIn/s", "swapOut/s", "psiCpuSome%"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("system default header should not include optional column %s:\n%s", col, out)
+		}
+	}
+}
+
+func TestVerboseSystemViewIncludesVerboseColumns(t *testing.T) {
+	row := verboseSystemRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	labelLine, headerLine := firstTableHeader(out)
+	if !strings.Contains(labelLine, "system") {
+		t.Fatalf("system verbose output missing section label:\n%s", out)
+	}
+	headerText := normalizedTableLine(headerLine)
+	wantOrder := strings.Join(systemColumns(true), " ")
+	if !strings.Contains(headerText, wantOrder) {
+		t.Fatalf("unexpected system verbose header order:\n%s", headerLine)
+	}
+	for _, col := range []string{"idle_cpu%", "memFreeMB", "memAvailMB", "cachedMB", "swapUsedMB", "psiCpuSome%"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("system verbose should not include %s:\n%s", col, out)
+		}
+	}
+	values := tableRowValues(t, out)
+	for key, want := range map[string]string{
+		"rkB/s":     "0.0",
+		"wkB/s":     "4.0",
+		"ctxt/s":    "12.0",
+		"swapIn/s":  "6.0",
+		"swapOut/s": "7.0",
+		"awaitS":    "0.001",
+	} {
+		if got := values[key]; got != want {
+			t.Fatalf("%s=%q want %q\n%s", key, got, want, out)
+		}
+	}
+}
+
+func TestSystemPressureViewIncludesPressureColumns(t *testing.T) {
+	row := pressureSystemRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system", Pressure: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	labelLine, headerLine := firstTableHeader(out)
+	if !strings.Contains(labelLine, "system") || !strings.Contains(labelLine, "pressure") {
+		t.Fatalf("system pressure output missing section labels:\n%s", out)
+	}
+	headerText := normalizedTableLine(headerLine)
+	wantOrder := strings.Join(append(systemColumns(false), pressureColumns()...), " ")
+	if !strings.Contains(headerText, wantOrder) {
+		t.Fatalf("unexpected system pressure header order:\n%s", headerLine)
+	}
+	values := tableRowValues(t, out)
+	for key, want := range map[string]string{
+		"psiCpuSome%": "16.0",
+		"psiMemSome%": "17.0",
+		"psiMemFull%": "18.0",
+		"psiIoSome%":  "19.0",
+		"psiIoFull%":  "20.0",
+	} {
+		if got := values[key]; got != want {
+			t.Fatalf("%s=%q want %q\n%s", key, got, want, out)
+		}
+	}
+}
+
+func TestSystemVerbosePressureViewIncludesBothColumnSets(t *testing.T) {
+	row := verboseSystemRow(0)
+	row.Values["psiCpuSome%"] = float64(16)
+	row.Values["psiMemSome%"] = float64(17)
+	row.Values["psiMemFull%"] = float64(18)
+	row.Values["psiIoSome%"] = float64(19)
+	row.Values["psiIoFull%"] = float64(20)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system", Verbose: true, Pressure: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	labelLine, headerLine := firstTableHeader(out)
+	if !strings.Contains(labelLine, "system") || !strings.Contains(labelLine, "pressure") {
+		t.Fatalf("system verbose+pressure output missing section labels:\n%s", out)
+	}
+	headerText := normalizedTableLine(headerLine)
+	wantOrder := strings.Join(append(systemColumns(true), pressureColumns()...), " ")
+	if !strings.Contains(headerText, wantOrder) {
+		t.Fatalf("unexpected system verbose+pressure header order:\n%s", headerLine)
+	}
+}
+
+func TestSummaryViewKeepsCompactSystemColumnsWhenVerbose(t *testing.T) {
+	row := verboseSystemRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	_, headerLine := firstTableHeader(out)
+	for _, col := range []string{"rkB/s", "wkB/s", "ctxt/s", "swapIn/s", "swapOut/s", "psiCpuSome%"} {
+		if strings.Contains(headerLine, col) {
+			t.Fatalf("summary view should keep compact system columns and exclude %s:\n%s", col, out)
+		}
+	}
+}
+
+func TestVerboseSystemMissingMetricsRenderDash(t *testing.T) {
+	row := testRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system", Verbose: true}); err != nil {
+		t.Fatal(err)
+	}
+	values := tableRowValues(t, buf.String())
+	for _, col := range []string{"ctxt/s", "swapIn/s", "swapOut/s"} {
+		if got := values[col]; got != "-" {
+			t.Fatalf("%s=%q want '-'\n%s", col, got, buf.String())
+		}
+	}
+}
+
+func TestPressureSystemMissingMetricsRenderDash(t *testing.T) {
+	row := testRow(0)
+	var buf bytes.Buffer
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "system", Pressure: true}); err != nil {
+		t.Fatal(err)
+	}
+	values := tableRowValues(t, buf.String())
+	for _, col := range []string{"psiCpuSome%", "psiMemSome%", "psiMemFull%", "psiIoSome%", "psiIoFull%"} {
+		if got := values[col]; got != "-" {
+			t.Fatalf("%s=%q want '-'\n%s", col, got, buf.String())
+		}
+	}
+}
+
+func TestSystemHeaderRepeatsWithVerbosePressureFlags(t *testing.T) {
+	rows := make([]derive.Row, 51)
+	for i := range rows {
+		rows[i] = verboseSystemRow(i)
+		rows[i].Values["psiCpuSome%"] = float64(16)
+	}
+	for _, opts := range []Options{
+		{View: "system", Verbose: true},
+		{View: "system", Pressure: true},
+		{View: "system", Verbose: true, Pressure: true},
+	} {
+		var buf bytes.Buffer
+		if err := Render(&buf, testMetadata(), nil, rows, opts); err != nil {
+			t.Fatal(err)
+		}
+		out := buf.String()
+		if got := strings.Count(out, "datetime"); got != 2 {
+			t.Fatalf("header count=%d want 2 for %#v:\n%s", got, opts, out)
+		}
+		if strings.Contains(out, "----") || strings.Contains(out, "[system]") {
+			t.Fatalf("should not restore old banner separators for %#v:\n%s", opts, out)
 		}
 	}
 }
@@ -492,7 +692,7 @@ func TestVerboseWiredTigerHeaderRepeatsAndKeepsCompactSeparators(t *testing.T) {
 func TestVerboseJSONIncludesReplicationMetrics(t *testing.T) {
 	row := verboseReplicationRow(0)
 	var buf bytes.Buffer
-	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "summary", JSON: true, Verbose: true}); err != nil {
+	if err := Render(&buf, testMetadata(), nil, []derive.Row{row}, Options{View: "repl", JSON: true, Verbose: true}); err != nil {
 		t.Fatal(err)
 	}
 	var payload map[string]any
@@ -675,7 +875,7 @@ func assertSectionOrder(t *testing.T, line string, labels []string) {
 	}
 }
 
-func TestSystemViewKeepsCompactDefaultColumns(t *testing.T) {
+func TestSystemViewIncludesCoreDefaultColumns(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Render(&buf, testMetadata(), nil, []derive.Row{testRow(0)}, Options{View: "system"}); err != nil {
 		t.Fatal(err)
@@ -718,10 +918,13 @@ func TestNumericFormattingByColumnType(t *testing.T) {
 		{"residentMB", float64(100), "100"},
 		{"ins/s", float64(0), "0.0"},
 		{"user_cpu%", float64(0), "0.0"},
+		{"ctxt/s", float64(1234.5), "1234.5"},
 		{"awaitS", float64(0), "0.000"},
 		{"rLatS", float64(0), "0.000"},
 		{"node1", float64(0), "0.0"},
 		{"node2", float64(12), "12.0"},
+		{"swapIn/s", float64(6), "6.0"},
+		{"psiCpuSome%", float64(16), "16.0"},
 		{"hbMs", float64(15.5), "15.5"},
 		{"applyOps/s", float64(100), "100.0"},
 		{"applyBufCnt", float64(42), "42"},
@@ -1007,5 +1210,25 @@ func verboseWiredTigerRow(i int) derive.Row {
 	row.Values["hsInsert/s"] = float64(6)
 	row.Values["hsRead/s"] = float64(7)
 	row.Values["hsWriteMB/s"] = float64(8.5)
+	return row
+}
+
+func verboseSystemRow(i int) derive.Row {
+	row := testRow(i)
+	row.Values["rkB/s"] = float64(0)
+	row.Values["wkB/s"] = float64(4)
+	row.Values["ctxt/s"] = float64(12)
+	row.Values["swapIn/s"] = float64(6)
+	row.Values["swapOut/s"] = float64(7)
+	return row
+}
+
+func pressureSystemRow(i int) derive.Row {
+	row := testRow(i)
+	row.Values["psiCpuSome%"] = float64(16)
+	row.Values["psiMemSome%"] = float64(17)
+	row.Values["psiMemFull%"] = float64(18)
+	row.Values["psiIoSome%"] = float64(19)
+	row.Values["psiIoFull%"] = float64(20)
 	return row
 }

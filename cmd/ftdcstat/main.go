@@ -22,6 +22,7 @@ type cliOptions struct {
 	Device   string
 	JSON     bool
 	Verbose  bool
+	Pressure bool
 	Range    model.TimeRange
 }
 
@@ -44,7 +45,7 @@ func main() {
 	}
 
 	reader := ftdc.NewNativeReader()
-	readerOpts := ftdc.ReaderOptionsFor(opts.View, opts.Verbose)
+	readerOpts := ftdc.ReaderOptionsFor(opts.View, opts.Verbose, opts.Pressure)
 	readerOpts.TimeRange = opts.Range
 	metadata, metadataWarnings, err := reader.ReadMetadataFiles(files)
 	if err != nil {
@@ -79,7 +80,7 @@ func main() {
 	for _, warning := range streamWarnings {
 		fmt.Fprintln(os.Stderr, "warning:", warning.String())
 	}
-	if err := render.Render(os.Stdout, metadata, warnings, rows, render.Options{View: opts.View, JSON: opts.JSON, Verbose: opts.Verbose, TimeLocation: timeLocation}); err != nil {
+	if err := render.Render(os.Stdout, metadata, warnings, rows, render.Options{View: opts.View, JSON: opts.JSON, Verbose: opts.Verbose, Pressure: opts.Pressure, TimeLocation: timeLocation}); err != nil {
 		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
 		os.Exit(1)
 	}
@@ -97,6 +98,8 @@ func parseArgs(args []string) (cliOptions, error) {
 			opts.JSON = true
 		case arg == "--verbose":
 			opts.Verbose = true
+		case arg == "--pressure":
+			opts.Pressure = true
 		case arg == "--view":
 			i++
 			if i >= len(args) {
@@ -179,10 +182,19 @@ func parseArgs(args []string) (cliOptions, error) {
 	if opts.View == "disk" {
 		opts.View = "system"
 	}
+	if opts.View == "all" {
+		opts.View = "summary"
+	}
 	switch opts.View {
 	case "server", "wt", "system", "repl", "summary":
 	default:
-		return opts, errors.New("--view must be one of server, wt, system, repl, summary")
+		return opts, errors.New("--view must be one of server, wt, system, repl, summary, all")
+	}
+	if opts.Pressure && opts.View != "system" {
+		return opts, errors.New("--pressure is only supported for --view system")
+	}
+	if opts.Verbose && opts.View != "repl" && opts.View != "wt" && opts.View != "system" {
+		return opts, errors.New("--verbose is only supported for --view repl, wt, or system")
 	}
 	return opts, nil
 }
@@ -202,7 +214,7 @@ func parseTimeArg(value string) (time.Time, error) {
 }
 
 func usage(w *os.File) {
-	fmt.Fprintln(w, "usage: ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|summary] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose]")
+	fmt.Fprintln(w, "usage: ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|repl|summary|all] [--interval N] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--verbose] [--pressure]")
 }
 
 func max(a, b int) int {
