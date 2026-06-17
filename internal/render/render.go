@@ -47,24 +47,34 @@ type StreamingRenderer struct {
 }
 
 func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows []derive.Row, opts Options) error {
+	if NeedsBufferedRows(opts) {
+		return RenderJSON(w, metadata, warnings, rows, opts)
+	}
+	return renderTableRows(w, metadata, rows, opts)
+}
+
+func RenderJSON(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows []derive.Row, opts Options) error {
+	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
+	layout := layoutForView(opts.View, replicationNodeLabels(rsInfo, rows), opts.Verbose, opts.Pressure)
+	payload := map[string]any{
+		"metadata": metadata.Summary(),
+		"rsInfo":   rsInfoForJSON(rsInfo),
+		"warnings": warnings,
+		"view":     opts.View,
+		"rows":     rowsForJSON(rows, layout),
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(payload)
+}
+
+func renderTableRows(w io.Writer, metadata model.Metadata, rows []derive.Row, opts Options) error {
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
 	nodeLabels := replicationNodeLabels(rsInfo, rows)
 	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure)
 	loc := opts.TimeLocation
 	if loc == nil {
 		loc = time.UTC
-	}
-	if opts.JSON {
-		payload := map[string]any{
-			"metadata": metadata.Summary(),
-			"rsInfo":   rsInfoForJSON(rsInfo),
-			"warnings": warnings,
-			"view":     opts.View,
-			"rows":     rowsForJSON(rows, layout),
-		}
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return enc.Encode(payload)
 	}
 	renderHeader(w, metadata, rsInfo, loc)
 	renderer := newStreamingRenderer(w, layout.Columns, layout.Sections, loc)
@@ -534,12 +544,12 @@ func renderTable(w io.Writer, rows []derive.Row, cols []string, sections []table
 	_ = renderer.Close()
 }
 
-func NewStreamingRenderer(w io.Writer, metadata model.Metadata, rowsForSizing []derive.Row, opts Options) (*StreamingRenderer, error) {
+func NewStreamingRenderer(w io.Writer, metadata model.Metadata, opts Options) (*StreamingRenderer, error) {
 	if opts.JSON {
 		return nil, fmt.Errorf("streaming renderer does not support JSON output")
 	}
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
-	nodeLabels := replicationNodeLabels(rsInfo, rowsForSizing)
+	nodeLabels := replicationNodeLabels(rsInfo, nil)
 	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure)
 	loc := opts.TimeLocation
 	if loc == nil {

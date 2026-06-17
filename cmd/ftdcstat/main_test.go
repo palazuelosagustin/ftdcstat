@@ -3,6 +3,10 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"ftdcstat/internal/derive"
+	"ftdcstat/internal/render"
 )
 
 func TestParseArgsDefaultIntervalIsSixty(t *testing.T) {
@@ -119,5 +123,25 @@ func TestParseArgsFromTo(t *testing.T) {
 	}
 	if opts.Range.From.IsZero() || opts.Range.To.IsZero() {
 		t.Fatalf("range not set: %#v", opts.Range)
+	}
+}
+
+func TestTableOutputDoesNotRequireBufferedRows(t *testing.T) {
+	if render.NeedsBufferedRows(render.Options{View: "summary"}) {
+		t.Fatal("table output should stream rows")
+	}
+}
+
+func TestJSONOutputRequiresBufferedRows(t *testing.T) {
+	if !render.NeedsBufferedRows(render.Options{View: "summary", JSON: true}) {
+		t.Fatal("json output should buffer rows")
+	}
+}
+
+func TestBufferedRowCollectorOnlyUsedForJSONPath(t *testing.T) {
+	collector := bufferedRowCollector{}
+	collector.add(derive.Row{Time: time.Unix(0, 0)})
+	if len(collector.snapshot()) != 1 {
+		t.Fatalf("collector rows=%d", len(collector.snapshot()))
 	}
 }

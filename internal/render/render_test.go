@@ -237,7 +237,7 @@ func TestStreamingRendererMatchesRenderOutput(t *testing.T) {
 		if err := Render(&want, testMetadata(), nil, rows, opts); err != nil {
 			t.Fatal(err)
 		}
-		streamer, err := NewStreamingRenderer(&got, testMetadata(), rows, opts)
+		streamer, err := NewStreamingRenderer(&got, testMetadata(), opts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -257,7 +257,7 @@ func TestStreamingRendererMatchesRenderOutput(t *testing.T) {
 
 func TestStreamingRendererRejectsJSON(t *testing.T) {
 	var buf bytes.Buffer
-	_, err := NewStreamingRenderer(&buf, testMetadata(), nil, Options{View: "summary", JSON: true})
+	_, err := NewStreamingRenderer(&buf, testMetadata(), Options{View: "summary", JSON: true})
 	if err == nil {
 		t.Fatal("expected JSON streaming constructor error")
 	}

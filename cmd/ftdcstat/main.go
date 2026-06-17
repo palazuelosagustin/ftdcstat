@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -24,6 +25,14 @@ type cliOptions struct {
 	Verbose  bool
 	Pressure bool
 	Range    model.TimeRange
+}
+
+type captureInput struct {
+	reader     ftdc.NativeReader
+	files      []discovery.MetricFile
+	readerOpts ftdc.ReaderOptions
+	metadata   model.Metadata
+	streamer   *derive.Streamer
 }
 
 func main() {
@@ -58,13 +67,6 @@ func main() {
 	}
 
 	timeLocation := time.UTC
-	streamer := derive.NewStreamer(derive.Options{
-		IntervalSeconds: opts.Interval,
-		GapThreshold:    time.Duration(max(60, opts.Interval*10)) * time.Second,
-		Device:          opts.Device,
-		Metadata:        metadata,
-		TimeLocation:    timeLocation,
-	})
 	renderOpts := render.Options{
 		View:         opts.View,
 		JSON:         opts.JSON,
@@ -72,53 +74,82 @@ func main() {
 		Pressure:     opts.Pressure,
 		TimeLocation: timeLocation,
 	}
-	if opts.JSON {
-		var rows []derive.Row
-		streamWarnings, err := reader.StreamFiles(files, readerOpts, func(sample model.MetricSample) error {
-			if row, ok := streamer.Add(sample); ok {
-				rows = append(rows, row)
-			}
-			return nil
-		})
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "ftdcstat:", err)
-			os.Exit(1)
-		}
-		warnings = append(warnings, streamWarnings...)
-		for _, warning := range streamWarnings {
-			fmt.Fprintln(os.Stderr, "warning:", warning.String())
-		}
-		if err := render.Render(os.Stdout, metadata, warnings, rows, renderOpts); err != nil {
+	input := captureInput{
+		reader:   reader,
+		files:    files,
+		readerOpts: readerOpts,
+		metadata: metadata,
+		streamer: derive.NewStreamer(derive.Options{
+			IntervalSeconds: opts.Interval,
+			GapThreshold:    time.Duration(max(60, opts.Interval*10)) * time.Second,
+			Device:          opts.Device,
+			Metadata:        metadata,
+			TimeLocation:    timeLocation,
+		}),
+	}
+
+	if render.NeedsBufferedRows(renderOpts) {
+		if err := runBufferedOutput(os.Stdout, input, warnings, renderOpts); err != nil {
 			fmt.Fprintln(os.Stderr, "ftdcstat:", err)
 			os.Exit(1)
 		}
 		return
 	}
-
-	renderer, err := render.NewStreamingRenderer(os.Stdout, metadata, nil, renderOpts)
-	if err != nil {
+	if err := runStreamingTableOutput(os.Stdout, input, warnings, renderOpts); err != nil {
 		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
 		os.Exit(1)
 	}
-	streamWarnings, err := reader.StreamFiles(files, readerOpts, func(sample model.MetricSample) error {
-		if row, ok := streamer.Add(sample); ok {
-			if err := renderer.RenderRow(row); err != nil {
-				return err
-			}
+}
+
+func runStreamingTableOutput(w io.Writer, input captureInput, warnings []model.Warning, renderOpts render.Options) error {
+	renderer, err := render.NewStreamingRenderer(w, input.metadata, renderOpts)
+	if err != nil {
+		return err
+	}
+	streamWarnings, err := input.reader.StreamFiles(input.files, input.readerOpts, func(sample model.MetricSample) error {
+		if row, ok := input.streamer.Add(sample); ok {
+			return renderer.RenderRow(row)
 		}
 		return nil
 	})
+	emitWarnings(streamWarnings)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
-		os.Exit(1)
+		return err
 	}
-	warnings = append(warnings, streamWarnings...)
-	for _, warning := range streamWarnings {
+	_ = warnings
+	return renderer.Close()
+}
+
+func runBufferedOutput(w io.Writer, input captureInput, warnings []model.Warning, renderOpts render.Options) error {
+	collector := bufferedRowCollector{}
+	streamWarnings, err := input.reader.StreamFiles(input.files, input.readerOpts, func(sample model.MetricSample) error {
+		if row, ok := input.streamer.Add(sample); ok {
+			collector.add(row)
+		}
+		return nil
+	})
+	emitWarnings(streamWarnings)
+	if err != nil {
+		return err
+	}
+	return render.RenderJSON(w, input.metadata, warnings, collector.snapshot(), renderOpts)
+}
+
+type bufferedRowCollector struct {
+	buffer []derive.Row
+}
+
+func (c *bufferedRowCollector) add(row derive.Row) {
+	c.buffer = append(c.buffer, row)
+}
+
+func (c *bufferedRowCollector) snapshot() []derive.Row {
+	return c.buffer
+}
+
+func emitWarnings(warnings []model.Warning) {
+	for _, warning := range warnings {
 		fmt.Fprintln(os.Stderr, "warning:", warning.String())
-	}
-	if err := renderer.Close(); err != nil {
-		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
-		os.Exit(1)
 	}
 }
 

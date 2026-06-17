@@ -41,7 +41,7 @@ func TestTableOutputStreamingMatchesBatchRender(t *testing.T) {
 			}
 
 			var stream bytes.Buffer
-			renderer, err := render.NewStreamingRenderer(&stream, metadata, nil, renderOpts)
+			renderer, err := render.NewStreamingRenderer(&stream, metadata, renderOpts)
 			if err != nil {
 				t.Fatal(err)
 			}
