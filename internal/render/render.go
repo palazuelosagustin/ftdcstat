@@ -822,29 +822,30 @@ func renderCmdLineOpts(w io.Writer, cmd map[string]any) {
 		return
 	}
 	fmt.Fprintln(w, "getCmdLineOpts")
-	if argv := lookupStringSlice(cmd, "argv"); len(argv) > 0 {
-		renderArgv(w, argv)
+	for _, item := range parsedCmdLineItems(cmd) {
+		fmt.Fprintf(w, "  %s\n", item)
 	}
 }
 
-func renderArgv(w io.Writer, argv []string) {
-	if len(argv) == 0 {
-		return
+func parsedCmdLineItems(cmd map[string]any) []string {
+	value, ok := model.Lookup(cmd, "parsed")
+	if !ok {
+		return nil
 	}
-	fmt.Fprintf(w, "  argv=%s\n", argv[0])
-	for i := 1; i < len(argv); i++ {
-		arg := argv[i]
-		if isOptionToken(arg) && i+1 < len(argv) && !isOptionToken(argv[i+1]) {
-			fmt.Fprintf(w, "          %s %s\n", arg, argv[i+1])
-			i++
+	parsed, ok := value.(map[string]any)
+	if !ok || len(parsed) == 0 {
+		return nil
+	}
+	filtered := make(map[string]any, len(parsed))
+	for key, value := range parsed {
+		if key == "setParameter" {
 			continue
 		}
-		fmt.Fprintf(w, "          %s\n", arg)
+		filtered[key] = value
 	}
-}
-
-func isOptionToken(value string) bool {
-	return strings.HasPrefix(value, "-") && value != "-"
+	items := flattenConfig(filtered, "", 4)
+	sort.Strings(items)
+	return items
 }
 
 func explicitParameters(cmd map[string]any) []string {

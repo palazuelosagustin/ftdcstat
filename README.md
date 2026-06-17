@@ -232,9 +232,9 @@ Member order prefers `replSetGetConfig` order when available. Otherwise it uses
 first-seen order from `replSetGetStatus.members`. If a new member appears later,
 it gets the next label, such as `node4`; earlier rows show `-` for that member.
 
-`getCmdLineOpts` prints `argv` with the executable on the first line and each
-option on its own indented line. Options with a following value are kept
-together on the same line.
+`getCmdLineOpts` prints the parsed startup config, flattened into `key=value`
+lines. It does not print raw `argv`, so config-file-driven launches do not show
+the executable path or `-f /path/to/mongod.conf` wrapper arguments there.
 
 Process information is not printed in the static header because `pid`, uptime,
 and process start can change over a capture. Instead, process markers are

@@ -70,6 +70,7 @@ func testMetadata() model.Metadata {
 				"net":               map[string]any{"port": 27017},
 				"replication":       map[string]any{"replSet": "rs0"},
 				"processManagement": map[string]any{"fork": true},
+				"setParameter":      map[string]any{"wiredTigerConcurrentWriteTransactions": 128},
 			},
 		},
 		"getParameter": map[string]any{
@@ -176,22 +177,32 @@ func TestHeaderPrintsCmdLineOptsAndExplicitParametersOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "getCmdLineOpts") || !strings.Contains(out, "  argv=mongod\n") {
-		t.Fatalf("missing getCmdLineOpts argv section:\n%s", out)
+	if !strings.Contains(out, "getCmdLineOpts\n") {
+		t.Fatalf("missing getCmdLineOpts section:\n%s", out)
 	}
 	for _, want := range []string{
-		"          --replSet rs0\n",
-		"          --dbpath /data/db\n",
-		"          --port 27017\n",
-		"          --fork\n",
-		"          --setParameter wiredTigerConcurrentWriteTransactions=128\n",
+		"  net.port=27017\n",
+		"  processManagement.fork=true\n",
+		"  replication.replSet=rs0\n",
+		"  storage.dbPath=/data/db\n",
+		"  storage.wiredTiger.engineConfig.cacheSizeGB=1\n",
 	} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("missing multiline argv item %q:\n%s", want, out)
+			t.Fatalf("missing parsed getCmdLineOpts item %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "argv=mongod --") {
-		t.Fatalf("argv should not be rendered as a single line:\n%s", out)
+	for _, removed := range []string{
+		"argv=mongod",
+		"/usr/bin/mongod",
+		"--replSet",
+		"--dbpath",
+		"--port",
+		"--fork",
+		"--setParameter",
+	} {
+		if strings.Contains(out, removed) {
+			t.Fatalf("getCmdLineOpts should not print raw argv token %q:\n%s", removed, out)
+		}
 	}
 	for _, removed := range []string{"  storage=", "  net=", "  replication=", "  processManagement=", "  setParameter="} {
 		if strings.Contains(out, removed) {
@@ -200,6 +211,9 @@ func TestHeaderPrintsCmdLineOptsAndExplicitParametersOnly(t *testing.T) {
 	}
 	if !strings.Contains(out, "wtCache=1") {
 		t.Fatalf("missing wt cache:\n%s", out)
+	}
+	if !strings.Contains(out, " wiredTigerConcurrentWriteTransactions=128\n") {
+		t.Fatalf("missing explicit setParameter item in Parameters:\n%s", out)
 	}
 	if strings.Contains(out, "transactionLifetime") {
 		t.Fatalf("default getParameter leaked into Parameters:\n%s", out)

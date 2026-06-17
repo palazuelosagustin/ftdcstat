@@ -71,6 +71,7 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 		"unavailable metrics render as `-`",
 		"serverStatus.metrics.repl.apply.ops",
 		"serverStatus.metrics.repl.buffer.apply.count",
+		"`getCmdLineOpts` prints the parsed startup config",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("README missing %q", want)
