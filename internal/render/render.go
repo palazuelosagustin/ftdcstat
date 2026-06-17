@@ -34,6 +34,18 @@ type tableLayout struct {
 	Sections []tableSection
 }
 
+type StreamingRenderer struct {
+	w                io.Writer
+	cols             []string
+	sections         []tableSection
+	widths           []int
+	separators       map[int]bool
+	header           []string
+	loc              *time.Location
+	headerRepeatRows int
+	dataRows         int
+}
+
 func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows []derive.Row, opts Options) error {
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
 	nodeLabels := replicationNodeLabels(rsInfo, rows)
@@ -55,8 +67,13 @@ func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows
 		return enc.Encode(payload)
 	}
 	renderHeader(w, metadata, rsInfo, loc)
-	renderTable(w, rows, layout.Columns, layout.Sections, loc)
-	return nil
+	renderer := newStreamingRenderer(w, layout.Columns, layout.Sections, rows, loc)
+	for _, row := range rows {
+		if err := renderer.RenderRow(row); err != nil {
+			return err
+		}
+	}
+	return renderer.Close()
 }
 
 func layoutForView(view string, nodeLabels []string, verbose, pressure bool) tableLayout {
@@ -510,49 +527,91 @@ func formatMetadataTimestamp(t time.Time, loc *time.Location) string {
 }
 
 func renderTable(w io.Writer, rows []derive.Row, cols []string, sections []tableSection, loc *time.Location) {
-	matrix := make([][]string, 0, len(rows)+1)
-	header := displayColumns(cols)
-	matrix = append(matrix, header)
+	renderer := newStreamingRenderer(w, cols, sections, rows, loc)
 	for _, row := range rows {
-		line := make([]string, len(cols))
-		for i, col := range cols {
-			if fixed, ok := fixedColumnValue(col, row, loc); ok {
-				line[i] = fixed
-				continue
-			}
-			line[i] = format(row.Values[col], col)
-		}
-		matrix = append(matrix, line)
+		_ = renderer.RenderRow(row)
+	}
+	_ = renderer.Close()
+}
+
+func NewStreamingRenderer(w io.Writer, metadata model.Metadata, rowsForSizing []derive.Row, opts Options) (*StreamingRenderer, error) {
+	if opts.JSON {
+		return nil, fmt.Errorf("streaming renderer does not support JSON output")
+	}
+	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
+	nodeLabels := replicationNodeLabels(rsInfo, rowsForSizing)
+	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure)
+	loc := opts.TimeLocation
+	if loc == nil {
+		loc = time.UTC
+	}
+	renderHeader(w, metadata, rsInfo, loc)
+	return newStreamingRenderer(w, layout.Columns, layout.Sections, rowsForSizing, loc), nil
+}
+
+func newStreamingRenderer(w io.Writer, cols []string, sections []tableSection, rowsForSizing []derive.Row, loc *time.Location) *StreamingRenderer {
+	if loc == nil {
+		loc = time.UTC
+	}
+	header := displayColumns(cols)
+	matrix := make([][]string, 0, len(rowsForSizing)+1)
+	matrix = append(matrix, header)
+	for _, row := range rowsForSizing {
+		matrix = append(matrix, tableLineForRow(cols, row, loc))
 	}
 	widths := widths(matrix)
-	separators := separatorsFromSections(sections)
-	printHeader := func() {
-		printGroupLine(w, widths, sections, separators)
-		printLine(w, header, cols, widths, separators, true)
+	renderer := &StreamingRenderer{
+		w:                w,
+		cols:             cols,
+		sections:         sections,
+		widths:           widths,
+		separators:       separatorsFromSections(sections),
+		header:           header,
+		loc:              loc,
+		headerRepeatRows: headerRepeatRows,
 	}
-	printHeader()
-	dataRows := 0
-	for _, row := range rows {
-		if dataRows > 0 && dataRows%headerRepeatRows == 0 {
-			printHeader()
-		}
-		if row.Marker != "" {
-			fmt.Fprintf(w, "--- %s ---\n", row.Marker)
-		}
-		if row.ProcessMarker != "" {
-			fmt.Fprintln(w, row.ProcessMarker)
-		}
-		line := make([]string, len(cols))
-		for i, col := range cols {
-			if fixed, ok := fixedColumnValue(col, row, loc); ok {
-				line[i] = fixed
-				continue
-			}
-			line[i] = format(row.Values[col], col)
-		}
-		printLine(w, line, cols, widths, separators, false)
-		dataRows++
+	renderer.printHeader()
+	return renderer
+}
+
+func (r *StreamingRenderer) RenderRow(row derive.Row) error {
+	if r.dataRows > 0 && r.dataRows%r.headerRepeatRows == 0 {
+		r.printHeader()
 	}
+	if row.Marker != "" {
+		if _, err := fmt.Fprintf(r.w, "--- %s ---\n", row.Marker); err != nil {
+			return err
+		}
+	}
+	if row.ProcessMarker != "" {
+		if _, err := fmt.Fprintln(r.w, row.ProcessMarker); err != nil {
+			return err
+		}
+	}
+	printLine(r.w, tableLineForRow(r.cols, row, r.loc), r.cols, r.widths, r.separators, false)
+	r.dataRows++
+	return nil
+}
+
+func (r *StreamingRenderer) Close() error {
+	return nil
+}
+
+func (r *StreamingRenderer) printHeader() {
+	printGroupLine(r.w, r.widths, r.sections, r.separators)
+	printLine(r.w, r.header, r.cols, r.widths, r.separators, true)
+}
+
+func tableLineForRow(cols []string, row derive.Row, loc *time.Location) []string {
+	line := make([]string, len(cols))
+	for i, col := range cols {
+		if fixed, ok := fixedColumnValue(col, row, loc); ok {
+			line[i] = fixed
+			continue
+		}
+		line[i] = format(row.Values[col], col)
+	}
+	return line
 }
 
 func printGroupLine(w io.Writer, widths []int, sections []tableSection, separators map[int]bool) {

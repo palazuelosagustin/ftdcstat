@@ -206,6 +206,49 @@ func TestHeaderPrintsCmdLineOptsAndExplicitParametersOnly(t *testing.T) {
 	}
 }
 
+func TestStreamingRendererMatchesRenderOutput(t *testing.T) {
+	rows := make([]derive.Row, 51)
+	for i := range rows {
+		rows[i] = testRow(i)
+	}
+	rows[0].ProcessMarker = "--- mongod process: pid=10 start=2026-06-04T18:59:00-03:00 ---"
+	rows[10].Marker = "gap 120s: rate baseline reset"
+
+	for _, opts := range []Options{
+		{View: "summary"},
+		{View: "system", Verbose: true, Pressure: true},
+		{View: "network", Verbose: true},
+	} {
+		var want, got bytes.Buffer
+		if err := Render(&want, testMetadata(), nil, rows, opts); err != nil {
+			t.Fatal(err)
+		}
+		streamer, err := NewStreamingRenderer(&got, testMetadata(), rows, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if err := streamer.RenderRow(row); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := streamer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if got.String() != want.String() {
+			t.Fatalf("streaming output mismatch for %#v\nwant:\n%s\ngot:\n%s", opts, want.String(), got.String())
+		}
+	}
+}
+
+func TestStreamingRendererRejectsJSON(t *testing.T) {
+	var buf bytes.Buffer
+	_, err := NewStreamingRenderer(&buf, testMetadata(), nil, Options{View: "summary", JSON: true})
+	if err == nil {
+		t.Fatal("expected JSON streaming constructor error")
+	}
+}
+
 func TestRSInfoFallbackUsesReplSetGetStatus(t *testing.T) {
 	m := model.NewMetadata()
 	ts := time.Date(2026, 6, 4, 19, 0, 0, 0, time.UTC)
