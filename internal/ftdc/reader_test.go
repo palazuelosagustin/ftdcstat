@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -323,6 +324,49 @@ func TestReadMetadataDerivesNetworkMaxConn(t *testing.T) {
 	if got := metadata.NetworkMaxConnDisplay(); got == "-" || got == "" {
 		t.Fatalf("expected derived maxConn from metadata, got %q", got)
 	}
+	if len(metadata.History["serverStatus"]) != 0 {
+		t.Fatalf("serverStatus history=%d", len(metadata.History["serverStatus"]))
+	}
+	if len(metadata.History["replSetGetStatus"]) != 0 {
+		t.Fatalf("replSetGetStatus history=%d", len(metadata.History["replSetGetStatus"]))
+	}
+	if _, ok := metadata.Latest["serverStatus"]; ok {
+		t.Fatal("serverStatus latest doc should not be retained")
+	}
+}
+
+func TestReadMetadataHeapStaysBoundedWithoutServerStatusHistory(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "diagnostic.data.27000")
+	if _, err := os.Stat(root); err != nil {
+		t.Skip("diagnostic.data.27000 sample directory not present")
+	}
+	files, _, err := discovery.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) > 3 {
+		files = files[:3]
+	}
+	before := readMetadataHeapAlloc(t)
+	metadata, _, err := NewNativeReader().ReadMetadataFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := readMetadataHeapAlloc(t)
+	if metadata.NetworkMaxConnDisplay() == "-" {
+		t.Fatal("expected derived maxConn")
+	}
+	if delta := int64(after) - int64(before); delta > 400*1024*1024 {
+		t.Fatalf("metadata heap delta=%.1fMB", float64(delta)/1e6)
+	}
+}
+
+func readMetadataHeapAlloc(t *testing.T) uint64 {
+	t.Helper()
+	runtime.GC()
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.HeapAlloc
 }
 
 var _ = model.Warning{}

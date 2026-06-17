@@ -101,10 +101,20 @@ type Metadata struct {
 	networkMaxConn      string
 	networkMaxConnTime  time.Time
 	haveNetworkMaxConn  bool
+	storageEngineName   string
+	storageEngineTime   time.Time
+	replSetName         string
+	replMembers         []ReplMemberState
+	replMemberByName    map[string]string
+	replNextLabel       int
 }
 
 func NewMetadata() Metadata {
-	return Metadata{Latest: map[string]MetadataRecord{}, History: map[string][]MetadataRecord{}}
+	return Metadata{
+		Latest:        map[string]MetadataRecord{},
+		History:       map[string][]MetadataRecord{},
+		replNextLabel: 1,
+	}
 }
 
 func (m *Metadata) AddDocument(ts time.Time, source string, doc any) {
@@ -139,10 +149,20 @@ func (m *Metadata) AddDocument(ts time.Time, source string, doc any) {
 }
 
 func (m *Metadata) addRecord(record MetadataRecord) {
+	switch record.Name {
+	case "serverStatus":
+		m.captureServerStatus(record)
+		return
+	case "replSetGetStatus":
+		m.captureReplSetGetStatus(record)
+		return
+	case "replSetGetConfig":
+		m.captureReplSetGetConfig(record)
+		return
+	}
 	if trackMetadataHistory(record.Name) {
 		m.History[record.Name] = append(m.History[record.Name], record)
 	}
-	m.maybeSetNetworkMaxConn(record)
 	old, exists := m.Latest[record.Name]
 	if exists && !record.Timestamp.IsZero() && !old.Timestamp.IsZero() && record.Timestamp.Before(old.Timestamp) {
 		return
@@ -151,7 +171,7 @@ func (m *Metadata) addRecord(record MetadataRecord) {
 }
 
 func trackMetadataHistory(name string) bool {
-	return name == "replSetGetConfig" || name == "replSetGetStatus" || name == "serverStatus"
+	return false
 }
 
 func bestTimestamp(fallback time.Time, doc map[string]any) time.Time {
@@ -166,6 +186,9 @@ func bestTimestamp(fallback time.Time, doc map[string]any) time.Time {
 }
 
 func (m Metadata) LatestDoc(name string) (map[string]any, bool) {
+	if name == "serverStatus" {
+		return m.compactServerStatusDoc()
+	}
 	if m.Latest == nil {
 		return nil, false
 	}
@@ -207,9 +230,12 @@ func (m Metadata) Summary() map[string]any {
 	out := map[string]any{}
 	for key, record := range m.Latest {
 		switch key {
-		case "buildInfo", "hostInfo", "getCmdLineOpts", "getParameter", "replSetGetConfig", "replSetGetStatus", "serverStatus":
+		case "buildInfo", "hostInfo", "getCmdLineOpts", "getParameter", "replSetGetConfig", "replSetGetStatus":
 			out[key] = record.Doc
 		}
+	}
+	if doc, ok := m.compactServerStatusDoc(); ok {
+		out["serverStatus"] = doc
 	}
 	return out
 }

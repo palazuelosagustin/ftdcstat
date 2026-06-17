@@ -802,6 +802,18 @@ func newReplMemberRegistry(metadata model.Metadata) *replMemberRegistry {
 		labelByIndex: map[int]string{},
 		next:         1,
 	}
+	if set, members := metadata.ReplSetSnapshot(); set != "" || len(members) > 0 {
+		registry.set = set
+		for i, member := range members {
+			registry.labelByName[member.Name] = member.Label
+			registry.members = append(registry.members, ReplMember{Label: member.Label, Name: member.Name})
+			registry.labelByIndex[i] = member.Label
+			if n := parseNodeLabelIndex(member.Label); n >= registry.next {
+				registry.next = n + 1
+			}
+		}
+		return registry
+	}
 	configRecords := metadataRecordsOrLatest(metadata, "replSetGetConfig")
 	for _, record := range configRecords {
 		config := replConfigBody(record.Doc)
@@ -945,6 +957,20 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func parseNodeLabelIndex(label string) int {
+	if len(label) <= len("node") {
+		return 0
+	}
+	if label[:len("node")] != "node" {
+		return 0
+	}
+	var n int
+	if _, err := fmt.Sscanf(label[len("node"):], "%d", &n); err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 func replMemberLags(sample model.MetricSample, members *replMemberRegistry) map[string]float64 {

@@ -1,0 +1,93 @@
+package model
+
+import (
+	"testing"
+	"time"
+)
+
+func TestServerStatusCaptureStoresScalarsOnly(t *testing.T) {
+	m := NewMetadata()
+	ts := time.Date(2026, 6, 4, 19, 0, 0, 0, time.UTC)
+	m.AddDocument(ts, "chunk", map[string]any{
+		"serverStatus": map[string]any{
+			"connections": map[string]any{
+				"current":   9,
+				"available": 400,
+			},
+			"storageEngine": map[string]any{"name": "wiredTiger"},
+			"repl":          map[string]any{"setName": "rs0"},
+		},
+	})
+	if got := m.NetworkMaxConnDisplay(); got != "409" {
+		t.Fatalf("maxConn=%q", got)
+	}
+	if got := m.StorageEngineName(); got != "wiredTiger" {
+		t.Fatalf("storageEngine=%q", got)
+	}
+	if _, ok := m.Latest["serverStatus"]; ok {
+		t.Fatal("serverStatus latest doc should not be retained")
+	}
+	if len(m.History["serverStatus"]) != 0 {
+		t.Fatal("serverStatus history should not be retained")
+	}
+	doc, ok := m.LatestDoc("serverStatus")
+	if !ok {
+		t.Fatal("expected compact serverStatus doc")
+	}
+	if got, _ := Lookup(doc, "storageEngine.name"); got != "wiredTiger" {
+		t.Fatalf("compact doc=%#v", doc)
+	}
+}
+
+func TestReplSnapshotCapturedWithoutStatusHistory(t *testing.T) {
+	m := NewMetadata()
+	ts := time.Date(2026, 6, 4, 19, 0, 0, 0, time.UTC)
+	m.AddDocument(ts, "config", map[string]any{
+		"replSetGetConfig": map[string]any{
+			"config": map[string]any{
+				"_id": "rs0",
+				"members": []any{
+					map[string]any{"host": "h1:27017"},
+					map[string]any{"host": "h2:27017"},
+				},
+			},
+		},
+	})
+	m.AddDocument(ts, "status", map[string]any{
+		"replSetGetStatus": map[string]any{
+			"set": "rs0",
+			"members": []any{
+				map[string]any{"name": "h1:27017"},
+				map[string]any{"name": "h2:27017"},
+			},
+		},
+	})
+	set, members := m.ReplSetSnapshot()
+	if set != "rs0" || len(members) != 2 {
+		t.Fatalf("snapshot set=%q members=%#v", set, members)
+	}
+	if len(m.History["replSetGetStatus"]) != 0 {
+		t.Fatal("replSetGetStatus history should not be retained")
+	}
+	if _, ok := m.Latest["replSetGetConfig"]; !ok {
+		t.Fatal("expected latest replSetGetConfig")
+	}
+}
+
+func TestSummaryUsesCompactServerStatus(t *testing.T) {
+	m := NewMetadata()
+	m.AddDocument(time.Unix(0, 0), "chunk", map[string]any{
+		"serverStatus": map[string]any{
+			"connections":   map[string]any{"current": 1, "available": 2},
+			"storageEngine": map[string]any{"name": "wiredTiger"},
+		},
+	})
+	summary := m.Summary()
+	status, ok := summary["serverStatus"].(map[string]any)
+	if !ok {
+		t.Fatalf("summary=%#v", summary)
+	}
+	if _, ok := status["connections"]; ok {
+		t.Fatalf("compact summary should not retain full connections map: %#v", status)
+	}
+}

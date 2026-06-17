@@ -198,7 +198,7 @@ func renderHeader(w io.Writer, metadata model.Metadata, rsInfo derive.ReplSetInf
 		"version=" + lookupString(build, "version"),
 		"git=" + lookupString(build, "gitVersion"),
 		"modules=" + lookupList(build, "modules"),
-		"storage=" + firstString(lookupString(status, "storageEngine.name"), lookupString(cmd, "parsed.storage.engine")),
+		"storage=" + firstString(metadata.StorageEngineName(), lookupString(status, "storageEngine.name"), lookupString(cmd, "parsed.storage.engine")),
 		"allocator=" + lookupString(build, "allocator"),
 		"openssl=" + lookupString(build, "openssl.running"),
 	}
