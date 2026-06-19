@@ -229,6 +229,95 @@ func TestBuildDatasetHidesPSIDashboardWithoutPressureSection(t *testing.T) {
 	}
 }
 
+func TestBuildDatasetSplitsServerDashboardSections(t *testing.T) {
+	metadata := model.NewMetadata()
+	row := derive.Row{
+		Time: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
+		Values: map[string]any{
+			"qTot":  3.0,
+			"ins/s": 1.0,
+			"qry/s": 2.0,
+			"upd/s": 3.0,
+			"del/s": 4.0,
+			"getm/s": 5.0,
+			"cmd/s":  6.0,
+			"rLatS":  0.010,
+			"wLatS":  0.020,
+			"cLatS":  0.030,
+		},
+	}
+
+	dataset := BuildDataset(metadata, nil, []derive.Row{row}, render.Options{View: "server"}, Options{
+		View:         "server",
+		TimeLocation: time.UTC,
+	})
+
+	wantSections := []string{"replication", "server / Commands", "server / Latency"}
+	if got := sectionNames(dataset.Metadata.Sections); strings.Join(got, "|") != strings.Join(wantSections, "|") {
+		t.Fatalf("sections=%v want=%v", got, wantSections)
+	}
+	if got := MetricNames(dataset.Metadata.Sections[1]); strings.Join(got, "|") != strings.Join([]string{"cmd/s", "del/s", "getm/s", "ins/s", "qTot", "qry/s", "upd/s"}, "|") {
+		t.Fatalf("command metrics=%v", got)
+	}
+	if got := MetricNames(dataset.Metadata.Sections[2]); strings.Join(got, "|") != strings.Join([]string{"cLatS", "rLatS", "wLatS"}, "|") {
+		t.Fatalf("latency metrics=%v", got)
+	}
+	first := dataset.Data.Rows[0].Sections
+	if _, ok := first["server / Commands"]["qTot"]; !ok {
+		t.Fatalf("server / Commands missing qTot: %#v", first["server / Commands"])
+	}
+	if _, ok := first["server / Latency"]["rLatS"]; !ok {
+		t.Fatalf("server / Latency missing rLatS: %#v", first["server / Latency"])
+	}
+	if _, ok := first["server / Commands"]["conn"]; ok {
+		t.Fatalf("server / Commands should not include conn: %#v", first["server / Commands"])
+	}
+	if _, ok := first["server / Commands"]["rsState"]; ok {
+		t.Fatalf("server / Commands should not include rsState: %#v", first["server / Commands"])
+	}
+}
+
+func TestBuildDatasetSummaryKeepsServerSplitInPlace(t *testing.T) {
+	metadata := model.NewMetadata()
+	row := derive.Row{
+		Time: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
+		Values: map[string]any{
+			"node1":       0.0,
+			"majLagS":     0.0,
+			"rsState":     "PRIMARY",
+			"qTot":        3.0,
+			"rLatS":       0.010,
+			"wLatS":       0.020,
+			"cLatS":       0.030,
+			"activeConn":  11.0,
+			"awaitS":      0.110,
+			"util%":       77.0,
+			"residentMB":  512.0,
+			"wtCache%":    55.0,
+			"dirty%":      4.0,
+			"evict/s":     8.0,
+			"appEvict/s":  6.0,
+			"ckptMS":      50.0,
+			"rdTkt":       32.0,
+			"wrTkt":       32.0,
+		},
+	}
+
+	dataset := BuildDataset(metadata, nil, []derive.Row{row}, render.Options{View: "summary"}, Options{
+		View:         "summary",
+		TimeLocation: time.UTC,
+	})
+
+	wantPrefix := []string{"replication", "server / Commands", "server / Latency", "network", "system / CPU", "system / Memory", "system / Disks", "wiredTiger"}
+	got := sectionNames(dataset.Metadata.Sections)
+	if len(got) < len(wantPrefix) {
+		t.Fatalf("summary sections too short: %v", got)
+	}
+	if strings.Join(got[:len(wantPrefix)], "|") != strings.Join(wantPrefix, "|") {
+		t.Fatalf("summary sections=%v want prefix=%v", got, wantPrefix)
+	}
+}
+
 func sectionNames(sections []Section) []string {
 	names := make([]string, 0, len(sections))
 	for _, section := range sections {

@@ -424,7 +424,7 @@ func timeRangeInfo(r model.TimeRange, loc *time.Location) TimeRangeInfo {
 }
 
 func buildSections(desc render.ViewDescription, view string) []Section {
-	if hasSystemOrPressureSections(desc.Sections) {
+	if hasDashboardSplitCandidates(desc.Sections) {
 		return buildDashboardSections(desc, view)
 	}
 	return buildDefaultSections(desc.Sections, view)
@@ -471,6 +471,8 @@ func buildDashboardSections(desc render.ViewDescription, view string) []Section 
 		defaultInAll bool
 		columns      []string
 	}{
+		{name: "server / Commands", source: "server", defaultInAll: false, columns: []string{"qTot", "ins/s", "qry/s", "upd/s", "del/s", "getm/s", "cmd/s"}},
+		{name: "server / Latency", source: "server", defaultInAll: false, columns: []string{"rLatS", "wLatS", "cLatS"}},
 		{name: "system / CPU", source: "system", defaultInAll: false, columns: []string{"user_cpu%", "system_cpu%", "iowait%", "ctxt/s"}},
 		{name: "system / Memory", source: "system", defaultInAll: false, columns: []string{"residentMB", "virtualMB", "swapIn/s", "swapOut/s"}},
 		{name: "system / Disks", source: "system", defaultInAll: false, columns: []string{"r/s", "w/s", "rkB/s", "wkB/s", "awaitS", "r_awaitS", "w_awaitS", "aqu-sz", "util%"}},
@@ -514,10 +516,14 @@ func buildDashboardSections(desc render.ViewDescription, view string) []Section 
 
 	var out []Section
 	for _, section := range desc.Sections {
-		if section.Name == "system" || section.Name == "pressure" {
-			if section.Name == "system" {
+		if section.Name == "server" || section.Name == "system" || section.Name == "pressure" {
+			if section.Name == "server" || section.Name == "system" {
 				appendSplitSections()
-				out = append(out, splitOut...)
+				for _, split := range splitOut {
+					if strings.HasPrefix(split.Name, section.Name+" /") {
+						out = append(out, split)
+					}
+				}
 			}
 			sourceCols := usedColumns[section.Name]
 			var remaining []string
@@ -541,9 +547,9 @@ func buildDashboardSections(desc render.ViewDescription, view string) []Section 
 	return out
 }
 
-func hasSystemOrPressureSections(sections []render.ViewSection) bool {
+func hasDashboardSplitCandidates(sections []render.ViewSection) bool {
 	for _, section := range sections {
-		if section.Name == "system" || section.Name == "pressure" {
+		if section.Name == "server" || section.Name == "system" || section.Name == "pressure" {
 			return true
 		}
 	}
@@ -559,6 +565,10 @@ func defaultMetricForView(view, section, column string) bool {
 		return column == "majLagS" || strings.HasPrefix(column, "node")
 	case "server":
 		return inSet(column, "qTot", "rLatS", "wLatS", "cLatS")
+	case "server / Commands":
+		return column == "qTot"
+	case "server / Latency":
+		return inSet(column, "rLatS", "wLatS", "cLatS")
 	case "network":
 		return inSet(column, "activeConn", "totalCreated/s", "queuedConn", "rejConn/s")
 	case "system", "system / CPU":

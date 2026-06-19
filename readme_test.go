@@ -87,6 +87,7 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 		"`/style.css`",
 		"`headerText`",
 		"monospace `<pre>` block instead of dashboard cards",
+		"`server / Commands` and `server / Latency`",
 		"`system / CPU`, `system / Memory`,",
 		"`system / Disks`, and `system / PSI`",
 		"Grafana-like tooltip with the exact UTC timestamp",
