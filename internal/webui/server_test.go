@@ -129,6 +129,114 @@ func TestNewHandlerServesMetadataDataAndIndex(t *testing.T) {
 	}
 }
 
+func TestBuildDatasetSplitsSystemDashboardSections(t *testing.T) {
+	metadata := model.NewMetadata()
+	row := derive.Row{
+		Time: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
+		Values: map[string]any{
+			"user_cpu%":   11.0,
+			"system_cpu%": 4.0,
+			"iowait%":     2.0,
+			"ctxt/s":      120.0,
+			"residentMB":  512.0,
+			"virtualMB":   2048.0,
+			"swapIn/s":    0.5,
+			"swapOut/s":   1.5,
+			"r/s":         8.0,
+			"w/s":         6.0,
+			"rkB/s":       320.0,
+			"wkB/s":       240.0,
+			"awaitS":      0.110,
+			"r_awaitS":    0.090,
+			"w_awaitS":    0.140,
+			"aqu-sz":      1.2,
+			"util%":       77.0,
+			"psiCpuSome%": 3.0,
+			"psiMemSome%": 1.0,
+			"psiMemFull%": 0.0,
+			"psiIoSome%":  5.0,
+			"psiIoFull%":  0.0,
+		},
+	}
+
+	dataset := BuildDataset(metadata, nil, []derive.Row{row}, render.Options{View: "system", Verbose: true, Pressure: true}, Options{
+		View:         "system",
+		TimeLocation: time.UTC,
+	})
+
+	wantSections := []string{"system / CPU", "system / Memory", "system / Disks", "system / PSI"}
+	if got := sectionNames(dataset.Metadata.Sections); strings.Join(got, "|") != strings.Join(wantSections, "|") {
+		t.Fatalf("sections=%v want=%v", got, wantSections)
+	}
+
+	if got := MetricNames(dataset.Metadata.Sections[0]); strings.Join(got, "|") != strings.Join([]string{"ctxt/s", "iowait%", "system_cpu%", "user_cpu%"}, "|") {
+		t.Fatalf("cpu metrics=%v", got)
+	}
+	if got := MetricNames(dataset.Metadata.Sections[1]); strings.Join(got, "|") != strings.Join([]string{"residentMB", "swapIn/s", "swapOut/s", "virtualMB"}, "|") {
+		t.Fatalf("memory metrics=%v", got)
+	}
+	if got := MetricNames(dataset.Metadata.Sections[2]); strings.Join(got, "|") != strings.Join([]string{"aqu-sz", "awaitS", "r/s", "r_awaitS", "rkB/s", "util%", "w/s", "w_awaitS", "wkB/s"}, "|") {
+		t.Fatalf("disk metrics=%v", got)
+	}
+	if got := MetricNames(dataset.Metadata.Sections[3]); strings.Join(got, "|") != strings.Join([]string{"psiCpuSome%", "psiIoFull%", "psiIoSome%", "psiMemFull%", "psiMemSome%"}, "|") {
+		t.Fatalf("psi metrics=%v", got)
+	}
+
+	first := dataset.Data.Rows[0].Sections
+	if _, ok := first["system / CPU"]["ctxt/s"]; !ok {
+		t.Fatalf("system / CPU missing ctxt/s: %#v", first["system / CPU"])
+	}
+	if _, ok := first["system / Memory"]["swapIn/s"]; !ok {
+		t.Fatalf("system / Memory missing swapIn/s: %#v", first["system / Memory"])
+	}
+	if _, ok := first["system / Disks"]["rkB/s"]; !ok {
+		t.Fatalf("system / Disks missing rkB/s: %#v", first["system / Disks"])
+	}
+	if _, ok := first["system / PSI"]["psiCpuSome%"]; !ok {
+		t.Fatalf("system / PSI missing psiCpuSome%%: %#v", first["system / PSI"])
+	}
+}
+
+func TestBuildDatasetHidesPSIDashboardWithoutPressureSection(t *testing.T) {
+	metadata := model.NewMetadata()
+	row := derive.Row{
+		Time: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
+		Values: map[string]any{
+			"user_cpu%":   11.0,
+			"system_cpu%": 4.0,
+			"iowait%":     2.0,
+			"residentMB":  512.0,
+			"virtualMB":   2048.0,
+			"r/s":         8.0,
+			"w/s":         6.0,
+			"awaitS":      0.110,
+			"r_awaitS":    0.090,
+			"w_awaitS":    0.140,
+			"aqu-sz":      1.2,
+			"util%":       77.0,
+		},
+	}
+
+	dataset := BuildDataset(metadata, nil, []derive.Row{row}, render.Options{View: "system"}, Options{
+		View:         "system",
+		TimeLocation: time.UTC,
+	})
+
+	for _, name := range sectionNames(dataset.Metadata.Sections) {
+		if name == "system / PSI" {
+			t.Fatalf("unexpected PSI section without pressure data: %v", sectionNames(dataset.Metadata.Sections))
+		}
+	}
+}
+
+func sectionNames(sections []Section) []string {
+	names := make([]string, 0, len(sections))
+	for _, section := range sections {
+		names = append(names, section.Name)
+	}
+	return names
+}
+
 func serveTestRequest(t *testing.T, server *Server, request string) string {
 	t.Helper()
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)

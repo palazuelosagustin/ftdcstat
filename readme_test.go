@@ -87,6 +87,8 @@ func TestREADMEDocumentsViewsColumnsAndFormulas(t *testing.T) {
 		"`/style.css`",
 		"`headerText`",
 		"monospace `<pre>` block instead of dashboard cards",
+		"`system / CPU`, `system / Memory`,",
+		"`system / Disks`, and `system / PSI`",
 		"Grafana-like tooltip with the exact UTC timestamp",
 		"visible series values at that timestamp",
 		"Large chart dataset detected. Consider using --avg 5m or --from/--to for better browser performance.",

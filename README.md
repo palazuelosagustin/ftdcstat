@@ -176,8 +176,10 @@ GET /api/data      -> selected derived rows or chart data
 that mirrors the CLI report header as closely as possible. The frontend renders
 it in a monospace `<pre>` block instead of dashboard cards.
 
-Charts are grouped by the same logical sections as the selected view. Hovering a
-section chart shows a Grafana-like tooltip with the exact UTC timestamp and the
+Charts are grouped by the same logical sections as the selected view. For
+system metrics, the web UI splits charts into `system / CPU`, `system / Memory`,
+`system / Disks`, and `system / PSI` when those metric groups are present in the
+loaded data. Hovering a section chart shows a Grafana-like tooltip with the exact UTC timestamp and the
 visible series values at that timestamp.
 
 ### `--listen ADDR`

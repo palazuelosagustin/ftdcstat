@@ -424,8 +424,15 @@ func timeRangeInfo(r model.TimeRange, loc *time.Location) TimeRangeInfo {
 }
 
 func buildSections(desc render.ViewDescription, view string) []Section {
-	out := make([]Section, 0, len(desc.Sections))
-	for _, section := range desc.Sections {
+	if hasSystemOrPressureSections(desc.Sections) {
+		return buildDashboardSections(desc, view)
+	}
+	return buildDefaultSections(desc.Sections, view)
+}
+
+func buildDefaultSections(descSections []render.ViewSection, view string) []Section {
+	out := make([]Section, 0, len(descSections))
+	for _, section := range descSections {
 		metrics := make([]Metric, 0, len(section.Columns))
 		for _, column := range section.Columns {
 			if column == "lagSLabel" {
@@ -445,6 +452,104 @@ func buildSections(desc render.ViewDescription, view string) []Section {
 	return out
 }
 
+func buildDashboardSections(desc render.ViewDescription, view string) []Section {
+	sectionColumns := map[string]map[string]bool{}
+	for _, section := range desc.Sections {
+		cols := sectionColumns[section.Name]
+		if cols == nil {
+			cols = map[string]bool{}
+			sectionColumns[section.Name] = cols
+		}
+		for _, column := range section.Columns {
+			cols[column] = true
+		}
+	}
+
+	defs := []struct {
+		name         string
+		source       string
+		defaultInAll bool
+		columns      []string
+	}{
+		{name: "system / CPU", source: "system", defaultInAll: false, columns: []string{"user_cpu%", "system_cpu%", "iowait%", "ctxt/s"}},
+		{name: "system / Memory", source: "system", defaultInAll: false, columns: []string{"residentMB", "virtualMB", "swapIn/s", "swapOut/s"}},
+		{name: "system / Disks", source: "system", defaultInAll: false, columns: []string{"r/s", "w/s", "rkB/s", "wkB/s", "awaitS", "r_awaitS", "w_awaitS", "aqu-sz", "util%"}},
+		{name: "system / PSI", source: "pressure", defaultInAll: true, columns: []string{"psiCpuSome%", "psiMemSome%", "psiMemFull%", "psiIoSome%", "psiIoFull%"}},
+	}
+
+	usedColumns := map[string]map[string]bool{}
+	var splitOut []Section
+	appendSplitSections := func() {
+		if len(splitOut) > 0 {
+			return
+		}
+		for _, def := range defs {
+			sourceCols := sectionColumns[def.source]
+			if len(sourceCols) == 0 {
+				continue
+			}
+			metrics := make([]Metric, 0, len(def.columns))
+			for _, column := range def.columns {
+				if !sourceCols[column] {
+					continue
+				}
+				info := render.MetricInfoForColumn(column)
+				metrics = append(metrics, Metric{
+					Column:   column,
+					Label:    column,
+					JSONName: info.JSONName,
+					Format:   info.Format,
+					Default:  def.defaultInAll || defaultMetricForView(view, def.name, column),
+				})
+				if usedColumns[def.source] == nil {
+					usedColumns[def.source] = map[string]bool{}
+				}
+				usedColumns[def.source][column] = true
+			}
+			if len(metrics) > 0 {
+				splitOut = append(splitOut, Section{Name: def.name, Metrics: metrics})
+			}
+		}
+	}
+
+	var out []Section
+	for _, section := range desc.Sections {
+		if section.Name == "system" || section.Name == "pressure" {
+			if section.Name == "system" {
+				appendSplitSections()
+				out = append(out, splitOut...)
+			}
+			sourceCols := usedColumns[section.Name]
+			var remaining []string
+			for _, column := range section.Columns {
+				if column == "lagSLabel" {
+					continue
+				}
+				if sourceCols != nil && sourceCols[column] {
+					continue
+				}
+				remaining = append(remaining, column)
+			}
+			if len(remaining) == 0 {
+				continue
+			}
+			out = append(out, buildDefaultSections([]render.ViewSection{{Name: section.Name, Columns: remaining}}, view)...)
+			continue
+		}
+		out = append(out, buildDefaultSections([]render.ViewSection{section}, view)...)
+	}
+	return out
+}
+
+func hasSystemOrPressureSections(sections []render.ViewSection) bool {
+	for _, section := range sections {
+		if section.Name == "system" || section.Name == "pressure" {
+			return true
+		}
+	}
+	return false
+}
+
 func defaultMetricForView(view, section, column string) bool {
 	if view != "summary" {
 		return true
@@ -456,8 +561,14 @@ func defaultMetricForView(view, section, column string) bool {
 		return inSet(column, "qTot", "rLatS", "wLatS", "cLatS")
 	case "network":
 		return inSet(column, "activeConn", "totalCreated/s", "queuedConn", "rejConn/s")
-	case "system":
-		return inSet(column, "awaitS", "util%", "iowait%", "user_cpu%", "system_cpu%", "residentMB")
+	case "system", "system / CPU":
+		return inSet(column, "iowait%", "user_cpu%", "system_cpu%")
+	case "system / Memory":
+		return inSet(column, "residentMB")
+	case "system / Disks":
+		return inSet(column, "awaitS", "util%")
+	case "system / PSI":
+		return false
 	case "wiredTiger":
 		return inSet(column, "wtCache%", "dirty%", "evict/s", "appEvict/s", "ckptMS", "rdTkt", "wrTkt")
 	default:
