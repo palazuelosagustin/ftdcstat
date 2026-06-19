@@ -483,6 +483,9 @@ func fillDisk(row *Row, c calculator, device string, reset bool) {
 	if queuedPresent && totalReadOps+totalWriteOps > 0 {
 		row.Values["awaitS"] = totalQueuedMS / (totalReadOps + totalWriteOps) / 1000
 	}
+	if queuedPresent {
+		row.Values["aqu-sz"] = totalQueuedMS / (c.dt * 1000)
+	}
 }
 
 func (c calculator) deltaAny(paths ...string) (float64, bool) {

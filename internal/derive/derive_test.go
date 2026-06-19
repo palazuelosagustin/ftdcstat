@@ -141,6 +141,9 @@ func TestRowsCalculatesDiskUtilization(t *testing.T) {
 	if got := rows[0].Values["awaitS"]; got != float64(0.02) {
 		t.Fatalf("aggregate awaitS=%v", got)
 	}
+	if got := rows[0].Values["aqu-sz"]; got != float64(0.03) {
+		t.Fatalf("aggregate aqu-sz=%v", got)
+	}
 }
 
 func TestRowsSetsProcessMarkerBeforeFirstMetricLine(t *testing.T) {
