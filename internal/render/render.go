@@ -18,9 +18,15 @@ type Options struct {
 	View         string
 	JSON         bool
 	WebURL       string
+	MetricsRange MetricsRange
 	Verbose      bool
 	Pressure     bool
 	TimeLocation *time.Location
+}
+
+type MetricsRange struct {
+	Start time.Time
+	End   time.Time
 }
 
 const headerRepeatRows = 50
@@ -48,6 +54,9 @@ type StreamingRenderer struct {
 }
 
 func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows []derive.Row, opts Options) error {
+	if opts.MetricsRange.Start.IsZero() && opts.MetricsRange.End.IsZero() {
+		opts.MetricsRange = MetricsRangeFromRows(rows)
+	}
 	if NeedsBufferedRows(opts) {
 		return RenderJSON(w, metadata, warnings, rows, opts)
 	}
@@ -77,7 +86,7 @@ func renderTableRows(w io.Writer, metadata model.Metadata, rows []derive.Row, op
 	if loc == nil {
 		loc = time.UTC
 	}
-	renderHeader(w, metadata, rsInfo, loc, opts.WebURL)
+	renderHeader(w, metadata, rsInfo, loc, opts.WebURL, opts.MetricsRange)
 	renderer := newStreamingRenderer(w, layout.Columns, layout.Sections, loc)
 	for _, row := range rows {
 		if err := renderer.RenderRow(row); err != nil {
@@ -187,7 +196,7 @@ func nodeLabelNumber(label string) (int, bool) {
 	return n, true
 }
 
-func renderHeader(w io.Writer, metadata model.Metadata, rsInfo derive.ReplSetInfo, loc *time.Location, webURL string) {
+func renderHeader(w io.Writer, metadata model.Metadata, rsInfo derive.ReplSetInfo, loc *time.Location, webURL string, metricsRange MetricsRange) {
 	build, _ := metadata.LatestDoc("buildInfo")
 	host, _ := metadata.LatestDoc("hostInfo")
 	cmd, _ := metadata.LatestDoc("getCmdLineOpts")
@@ -218,6 +227,7 @@ func renderHeader(w io.Writer, metadata model.Metadata, rsInfo derive.ReplSetInf
 		fmt.Fprintf(w, " %s", item)
 	}
 	fmt.Fprintln(w)
+	renderMetricsRangeHeader(w, metricsRange)
 	renderNetworkHeader(w, metadata)
 	if webURL != "" {
 		renderWebUIHeader(w, webURL)
@@ -228,6 +238,19 @@ func renderHeader(w io.Writer, metadata model.Metadata, rsInfo derive.ReplSetInf
 func renderNetworkHeader(w io.Writer, metadata model.Metadata) {
 	fmt.Fprintln(w, "network")
 	fmt.Fprintf(w, "  maxConn: %s\n", metadata.NetworkMaxConnDisplay())
+}
+
+func renderMetricsRangeHeader(w io.Writer, metricsRange MetricsRange) {
+	fmt.Fprintln(w, "metricsRange")
+	fmt.Fprintf(w, "  start: %s\n", formatMetricsRangeTime(metricsRange.Start))
+	fmt.Fprintf(w, "  end:   %s\n", formatMetricsRangeTime(metricsRange.End))
+}
+
+func formatMetricsRangeTime(ts time.Time) string {
+	if ts.IsZero() {
+		return "-"
+	}
+	return ts.UTC().Format(time.RFC3339)
 }
 
 func renderWebUIHeader(w io.Writer, webURL string) {
@@ -535,8 +558,22 @@ func NewStreamingRenderer(w io.Writer, metadata model.Metadata, opts Options) (*
 	if loc == nil {
 		loc = time.UTC
 	}
-	renderHeader(w, metadata, rsInfo, loc, opts.WebURL)
+	renderHeader(w, metadata, rsInfo, loc, opts.WebURL, opts.MetricsRange)
 	return newStreamingRenderer(w, layout.Columns, layout.Sections, loc), nil
+}
+
+func MetricsRangeFromRows(rows []derive.Row) MetricsRange {
+	var out MetricsRange
+	for _, row := range rows {
+		if row.Time.IsZero() {
+			continue
+		}
+		if out.Start.IsZero() {
+			out.Start = row.Time
+		}
+		out.End = row.Time
+	}
+	return out
 }
 
 func newStreamingRenderer(w io.Writer, cols []string, sections []tableSection, loc *time.Location) *StreamingRenderer {

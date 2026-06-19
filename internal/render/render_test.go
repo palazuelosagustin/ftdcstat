@@ -256,6 +256,43 @@ func TestHeaderOmitsWebUISectionWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestHeaderPrintsMetricsRangeAfterParametersAndBeforeWebUI(t *testing.T) {
+	var buf bytes.Buffer
+	err := Render(&buf, testMetadata(), nil, []derive.Row{testRow(0), testRow(1)}, Options{
+		View:   "server",
+		WebURL: "http://127.0.0.1:55508",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "metricsRange\n  start: 2026-06-04T19:00:00Z\n  end:   2026-06-04T19:01:00Z\n") {
+		t.Fatalf("missing metricsRange section:\n%s", out)
+	}
+	paramsIdx := strings.Index(out, "\nParameters\n")
+	rangeIdx := strings.Index(out, "\nmetricsRange\n")
+	webIdx := strings.Index(out, "\nwebUI\n")
+	labelLine, _ := firstTableHeader(out)
+	tableIdx := strings.Index(out, labelLine)
+	if paramsIdx < 0 || rangeIdx < 0 || webIdx < 0 || tableIdx < 0 {
+		t.Fatalf("expected Parameters, metricsRange, webUI, and table sections:\n%s", out)
+	}
+	if !(paramsIdx < rangeIdx && rangeIdx < webIdx && webIdx < tableIdx) {
+		t.Fatalf("metricsRange should appear after Parameters and before webUI/table:\n%s", out)
+	}
+}
+
+func TestHeaderPrintsDashMetricsRangeWhenNoRows(t *testing.T) {
+	var buf bytes.Buffer
+	err := Render(&buf, testMetadata(), nil, nil, Options{View: "server"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "metricsRange\n  start: -\n  end:   -\n") {
+		t.Fatalf("missing empty metricsRange section:\n%s", buf.String())
+	}
+}
+
 func TestStreamingRendererMatchesRenderOutput(t *testing.T) {
 	rows := make([]derive.Row, 51)
 	for i := range rows {
@@ -269,6 +306,7 @@ func TestStreamingRendererMatchesRenderOutput(t *testing.T) {
 		{View: "system", Verbose: true, Pressure: true},
 		{View: "network", Verbose: true},
 	} {
+		opts.MetricsRange = MetricsRangeFromRows(rows)
 		var want, got bytes.Buffer
 		if err := Render(&want, testMetadata(), nil, rows, opts); err != nil {
 			t.Fatal(err)
@@ -346,7 +384,7 @@ func TestProcessMarkerBeforeFirstMetricLineAndRestartMarker(t *testing.T) {
 	}
 	out := buf.String()
 	processIdx := strings.Index(out, "mongod process")
-	firstRowIdx := strings.Index(out, formatRowTime(testRow(0).Time, time.UTC))
+	firstRowIdx := strings.Index(out, "\n"+formatRowTime(testRow(0).Time, time.UTC)+" |")
 	restartIdx := strings.Index(out, "mongod restart detected: pid=11")
 	if processIdx < 0 || firstRowIdx < 0 || processIdx > firstRowIdx {
 		t.Fatalf("process marker not before first metric row:\n%s", out)
@@ -1072,7 +1110,7 @@ func tableRowValues(t *testing.T, out string) map[string]string {
 	}
 	header := strings.Fields(strings.ReplaceAll(headerLine, "|", ""))
 	for _, line := range strings.Split(out, "\n") {
-		if !strings.Contains(line, "2026-06-04T19:00:00Z") {
+		if !strings.HasPrefix(line, "2026-06-04T19:00:00Z ") && !strings.HasPrefix(line, "2026-06-04T19:00:00Z|") {
 			continue
 		}
 		fields := strings.Fields(strings.ReplaceAll(line, "|", ""))
@@ -1197,7 +1235,7 @@ func TestSummaryAndReplViewsMatchReplicationValues(t *testing.T) {
 func replicationDataValues(t *testing.T, out string) map[string]string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
-		if !strings.Contains(line, "2026-06-04T19:00:00Z") {
+		if !strings.HasPrefix(line, "2026-06-04T19:00:00Z ") && !strings.HasPrefix(line, "2026-06-04T19:00:00Z|") {
 			continue
 		}
 		parts := strings.Split(line, "|")

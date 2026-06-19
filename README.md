@@ -314,6 +314,7 @@ rsInfo replica set name and node label to host:port mapping
 hostInfo hostname/OS/kernel/libc/CPU topology/memory/pages/THP/versionString
 getCmdLineOpts parsed config
 configured parameters
+metricsRange actual first and last rendered metric timestamps after filters
 network maxConn metadata derived during metadata reading
 ```
 
@@ -353,6 +354,19 @@ Rate baselines are reset after a detected restart.
 The `Parameters` section always includes configured WiredTiger cache size when
 available. Other parameters are shown only when explicitly configured in startup
 options or config-derived `getCmdLineOpts`, primarily under `setParameter`.
+
+The `metricsRange` section prints the actual first and last rendered metric row
+timestamps after view selection, interval handling, and any `--from` / `--to`
+filtering:
+
+```text
+metricsRange
+  start: 2026-06-18T00:00:00Z
+  end:   2026-06-18T23:00:00Z
+```
+
+It is printed after `Parameters` and before `webUI` when present, or before the
+metrics table when `--web` is not enabled.
 
 Metadata changes across files are normal in rotated diagnostic directories and
 are not printed as warnings by default.

@@ -36,7 +36,7 @@ type captureInput struct {
 	files      []discovery.MetricFile
 	readerOpts ftdc.ReaderOptions
 	metadata   model.Metadata
-	streamer   *derive.Streamer
+	streamerOpts derive.Options
 }
 
 func main() {
@@ -83,13 +83,13 @@ func main() {
 		files:      files,
 		readerOpts: readerOpts,
 		metadata:   metadata,
-		streamer: derive.NewStreamer(derive.Options{
+		streamerOpts: derive.Options{
 			IntervalSeconds: opts.Interval,
 			GapThreshold:    time.Duration(max(60, opts.Interval*10)) * time.Second,
 			Device:          opts.Device,
 			Metadata:        metadata,
 			TimeLocation:    timeLocation,
-		}),
+		},
 	}
 
 	if opts.Web {
@@ -113,12 +113,18 @@ func main() {
 }
 
 func runStreamingTableOutput(w io.Writer, input captureInput, warnings []model.Warning, renderOpts render.Options) error {
+	metricsRange, err := streamMetricsRange(input)
+	if err != nil {
+		return err
+	}
+	renderOpts.MetricsRange = metricsRange
 	renderer, err := render.NewStreamingRenderer(w, input.metadata, renderOpts)
 	if err != nil {
 		return err
 	}
+	streamer := derive.NewStreamer(input.streamerOpts)
 	streamWarnings, err := input.reader.StreamFiles(input.files, input.readerOpts, func(sample model.MetricSample) error {
-		if row, ok := input.streamer.Add(sample); ok {
+		if row, ok := streamer.Add(sample); ok {
 			return renderer.RenderRow(row)
 		}
 		return nil
@@ -137,6 +143,7 @@ func runBufferedOutput(w io.Writer, input captureInput, warnings []model.Warning
 	if err != nil {
 		return err
 	}
+	renderOpts.MetricsRange = render.MetricsRangeFromRows(rows)
 	return render.RenderJSON(w, input.metadata, warnings, rows, renderOpts)
 }
 
@@ -146,6 +153,7 @@ func runWebOutput(w io.Writer, input captureInput, warnings []model.Warning, ren
 	if err != nil {
 		return err
 	}
+	renderOpts.MetricsRange = render.MetricsRangeFromRows(rows)
 	dataset := webui.BuildDataset(input.metadata, append(append([]model.Warning(nil), warnings...), streamWarnings...), rows, renderOpts, webui.Options{
 		View:         opts.View,
 		Avg:          opts.Avg,
@@ -173,13 +181,34 @@ func runWebOutput(w io.Writer, input captureInput, warnings []model.Warning, ren
 
 func collectRows(input captureInput) ([]derive.Row, []model.Warning, error) {
 	collector := bufferedRowCollector{}
+	streamer := derive.NewStreamer(input.streamerOpts)
 	streamWarnings, err := input.reader.StreamFiles(input.files, input.readerOpts, func(sample model.MetricSample) error {
-		if row, ok := input.streamer.Add(sample); ok {
+		if row, ok := streamer.Add(sample); ok {
 			collector.add(row)
 		}
 		return nil
 	})
 	return collector.snapshot(), streamWarnings, err
+}
+
+func streamMetricsRange(input captureInput) (render.MetricsRange, error) {
+	var out render.MetricsRange
+	streamer := derive.NewStreamer(input.streamerOpts)
+	_, err := input.reader.StreamFiles(input.files, input.readerOpts, func(sample model.MetricSample) error {
+		row, ok := streamer.Add(sample)
+		if !ok || row.Time.IsZero() {
+			return nil
+		}
+		if out.Start.IsZero() {
+			out.Start = row.Time
+		}
+		out.End = row.Time
+		return nil
+	})
+	if err != nil {
+		return render.MetricsRange{}, err
+	}
+	return out, nil
 }
 
 type bufferedRowCollector struct {
