@@ -372,8 +372,8 @@ PRIMARY SECONDARY RECOVERING STARTUP2 ARBITER UNKNOWN
 
 ### `replication` Section
 
-`replication` is shown before `server` in `--view summary`. It is also included with
-`--view server`, because replication lag is server/replica-set status data.
+`replication` is shown before `server` in `--view summary`. The focused
+replication view is `--view repl`.
 
 ```text
 lagS     replication header label; the following node columns are lag values in seconds
@@ -403,7 +403,7 @@ repeated as a data literal on each row.
 
 `majLagS` is the lag between `serverStatus.repl.lastWrite.lastWriteDate` and
 `serverStatus.repl.lastWrite.majorityWriteDate`, in seconds. It appears after
-the per-node lag columns in `--view summary`, `--view server`, and `--view repl`.
+the per-node lag columns in `--view summary` and `--view repl`.
 
 Lag is calculated per row from that timestamp's `replSetGetStatus` data:
 

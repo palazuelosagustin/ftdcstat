@@ -902,9 +902,14 @@ func TestServerViewIncludesReplicationAndServerSections(t *testing.T) {
 	}
 	out := buf.String()
 	labelLine, headerLine := firstTableHeader(out)
-	assertSectionOrder(t, labelLine, []string{"replication", "server"})
-	if strings.Count(labelLine, "|") != 2 || !strings.Contains(headerLine, "datetime") || !strings.Contains(headerLine, "lagS node1 node2 majLagS rsState") || !strings.Contains(headerLine, "qTot") {
-		t.Fatalf("server view should render datetime | replication | server:\n%s", out)
+	assertSectionOrder(t, labelLine, []string{"server"})
+	if strings.Count(labelLine, "|") != 1 || !strings.Contains(headerLine, "datetime") || !strings.Contains(headerLine, "qTot") {
+		t.Fatalf("server view should render datetime | server:\n%s", out)
+	}
+	for _, forbidden := range []string{"lagS", "node1", "node2", "majLagS", "rsState"} {
+		if strings.Contains(headerLine, forbidden) {
+			t.Fatalf("server view should not include replication column %s:\n%s", forbidden, out)
+		}
 	}
 	if strings.Contains(headerLine, " conn ") || strings.Contains(headerLine, " conn|") || strings.Contains(headerLine, "| conn ") {
 		t.Fatalf("server view should not include conn:\n%s", out)
@@ -1257,21 +1262,10 @@ func TestJSONIncludesRSInfoMappingAndReplicationGroup(t *testing.T) {
 	}
 	rows := payload["rows"].([]any)
 	gotRow := rows[0].(map[string]any)
-	replication := gotRow["replication"].(map[string]any)
-	lagS := replication["lagS"].(map[string]any)
-	if lagS["node1"] != float64(0) {
-		t.Fatalf("node1 lag=%#v", lagS["node1"])
-	}
-	if _, ok := lagS["node2"]; !ok || lagS["node2"] != nil {
-		t.Fatalf("node2 missing lag should be JSON null: %#v", lagS)
-	}
-	if replication["majLagS"] != float64(0) {
-		t.Fatalf("replication.majLagS=%#v", replication["majLagS"])
+	if _, ok := gotRow["replication"]; ok {
+		t.Fatalf("server JSON should not contain replication section: %#v", gotRow)
 	}
 	server := gotRow["server"].(map[string]any)
-	if replication["rsState"] != "PRIMARY" {
-		t.Fatalf("replication.rsState=%#v", replication["rsState"])
-	}
 	if _, ok := server["rsState"]; ok {
 		t.Fatalf("server should not contain rsState: %#v", server)
 	}

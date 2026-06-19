@@ -90,7 +90,7 @@ func layoutForView(view string, nodeLabels []string, verbose, pressure bool) tab
 	replVerbose := verbose && view == "repl"
 	switch view {
 	case "server":
-		return buildLayout(replicationColumns(nodeLabels, false), []namedColumns{
+		return buildLayout(nil, []namedColumns{
 			{Name: "server", Columns: columnsForSection("server")},
 		})
 	case "wt":

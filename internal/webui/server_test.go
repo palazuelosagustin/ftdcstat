@@ -252,14 +252,14 @@ func TestBuildDatasetSplitsServerDashboardSections(t *testing.T) {
 		TimeLocation: time.UTC,
 	})
 
-	wantSections := []string{"replication", "server / Commands", "server / Latency"}
+	wantSections := []string{"server / Commands", "server / Latency"}
 	if got := sectionNames(dataset.Metadata.Sections); strings.Join(got, "|") != strings.Join(wantSections, "|") {
 		t.Fatalf("sections=%v want=%v", got, wantSections)
 	}
-	if got := MetricNames(dataset.Metadata.Sections[1]); strings.Join(got, "|") != strings.Join([]string{"cmd/s", "del/s", "getm/s", "ins/s", "qTot", "qry/s", "upd/s"}, "|") {
+	if got := MetricNames(dataset.Metadata.Sections[0]); strings.Join(got, "|") != strings.Join([]string{"cmd/s", "del/s", "getm/s", "ins/s", "qTot", "qry/s", "upd/s"}, "|") {
 		t.Fatalf("command metrics=%v", got)
 	}
-	if got := MetricNames(dataset.Metadata.Sections[2]); strings.Join(got, "|") != strings.Join([]string{"cLatS", "rLatS", "wLatS"}, "|") {
+	if got := MetricNames(dataset.Metadata.Sections[1]); strings.Join(got, "|") != strings.Join([]string{"cLatS", "rLatS", "wLatS"}, "|") {
 		t.Fatalf("latency metrics=%v", got)
 	}
 	first := dataset.Data.Rows[0].Sections
