@@ -1,4 +1,4 @@
-module ftdcstat
+module mongodb-ftdcstat
 
 go 1.22
 

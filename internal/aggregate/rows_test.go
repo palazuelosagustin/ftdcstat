@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/derive"
 )
 
 func TestAverageRowsAlignsBucketsToUTCWallClock(t *testing.T) {

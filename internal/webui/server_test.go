@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
-	"ftdcstat/internal/render"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/render"
 )
 
 func TestBuildDatasetAveragesRowsIntoBuckets(t *testing.T) {
@@ -282,11 +282,11 @@ func TestBuildDatasetSplitsServerDashboardSections(t *testing.T) {
 	row := derive.Row{
 		Time: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
 		Values: map[string]any{
-			"qTot":  3.0,
-			"ins/s": 1.0,
-			"qry/s": 2.0,
-			"upd/s": 3.0,
-			"del/s": 4.0,
+			"qTot":   3.0,
+			"ins/s":  1.0,
+			"qry/s":  2.0,
+			"upd/s":  3.0,
+			"del/s":  4.0,
 			"getm/s": 5.0,
 			"cmd/s":  6.0,
 			"rLatS":  0.010,
@@ -330,24 +330,24 @@ func TestBuildDatasetSummaryKeepsServerSplitInPlace(t *testing.T) {
 	row := derive.Row{
 		Time: time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC),
 		Values: map[string]any{
-			"node1":       0.0,
-			"majLagS":     0.0,
-			"rsState":     "PRIMARY",
-			"qTot":        3.0,
-			"rLatS":       0.010,
-			"wLatS":       0.020,
-			"cLatS":       0.030,
-			"activeConn":  11.0,
-			"awaitS":      0.110,
-			"util%":       77.0,
-			"residentMB":  512.0,
-			"wtCache%":    55.0,
-			"dirty%":      4.0,
-			"evict/s":     8.0,
-			"appEvict/s":  6.0,
-			"ckptMS":      50.0,
-			"rdTkt":       32.0,
-			"wrTkt":       32.0,
+			"node1":      0.0,
+			"majLagS":    0.0,
+			"rsState":    "PRIMARY",
+			"qTot":       3.0,
+			"rLatS":      0.010,
+			"wLatS":      0.020,
+			"cLatS":      0.030,
+			"activeConn": 11.0,
+			"awaitS":     0.110,
+			"util%":      77.0,
+			"residentMB": 512.0,
+			"wtCache%":   55.0,
+			"dirty%":     4.0,
+			"evict/s":    8.0,
+			"appEvict/s": 6.0,
+			"ckptMS":     50.0,
+			"rdTkt":      32.0,
+			"wrTkt":      32.0,
 		},
 	}
 

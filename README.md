@@ -1,18 +1,18 @@
-# ftdcstat
+# mongodb-ftdcstat
 
-`ftdcstat` reads a MongoDB `diagnostic.data` directory and prints FTDC metrics
+`mongodb-ftdcstat` reads a MongoDB `diagnostic.data` directory and prints FTDC metrics
 as terminal-friendly tables or serves a local plotting UI.
 
 ## Build
 
 ```bash
-go build -o ftdcstat ./cmd/ftdcstat
+go build -o mongodb-ftdcstat ./cmd/mongodb-ftdcstat
 ```
 
 ## Usage
 
 ```bash
-ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|network|repl|summary|all] [--interval N] [--avg DURATION] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--web] [--listen ADDR] [--verbose] [--pressure]
+mongodb-ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|network|repl|summary|all] [--interval N] [--avg DURATION] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--web] [--listen ADDR] [--verbose] [--pressure]
 ```
 
 The input is a directory, not a single FTDC file. The tool discovers
@@ -46,7 +46,7 @@ all      Compatibility alias for summary
 `--view summary` is intended for horizontal scrolling:
 
 ```bash
-ftdcstat diagnostic.data --view summary | less -S
+mongodb-ftdcstat diagnostic.data --view summary | less -S
 ```
 
 It prints one wide table, one row per display interval, and repeats the compact
@@ -77,14 +77,14 @@ With the default MongoDB `diagnosticDataCollectionPeriodMillis=1000`,
 report and the local web UI.
 
 ```bash
-ftdcstat diagnostic.data --view summary --avg 5m
-ftdcstat diagnostic.data --web --view summary --avg 5m
+mongodb-ftdcstat diagnostic.data --view summary --avg 5m
+mongodb-ftdcstat diagnostic.data --web --view summary --avg 5m
 ```
 
 Valid bucket sizes are `1m` through `15m`. `--avg` rejects smaller or larger
 durations, and it cannot be combined with an explicit `--interval`.
 
-When enabled, `ftdcstat` prints:
+When enabled, `mongodb-ftdcstat` prints:
 
 ```text
 Averaging: 5m buckets; datetime is bucket start; values are averaged per bucket.
@@ -97,7 +97,7 @@ right before the metrics table. Empty buckets are skipped.
 Filters disk-derived fields to a single device.
 
 ```bash
-ftdcstat diagnostic.data --view system --device sda
+mongodb-ftdcstat diagnostic.data --view system --device sda
 ```
 
 Without `--device`, disk rates are totals across discovered disks and `util%` is
@@ -108,7 +108,7 @@ the maximum utilization among disks.
 Filters samples to a time range.
 
 ```bash
-ftdcstat diagnostic.data --from "2026-06-04T19:00:00" --to "2026-06-04T20:00:00"
+mongodb-ftdcstat diagnostic.data --from "2026-06-04T19:00:00" --to "2026-06-04T20:00:00"
 ```
 
 Rules:
@@ -137,9 +137,9 @@ and unavailable lag values are `null`.
 `--web` starts a local HTTP server and still prints the normal terminal table.
 
 ```bash
-ftdcstat diagnostic.data --web
-ftdcstat diagnostic.data --web --view summary --avg 5m
-ftdcstat diagnostic.data --web --from "2026-06-04T19:00:00" --to "2026-06-04T20:00:00"
+mongodb-ftdcstat diagnostic.data --web
+mongodb-ftdcstat diagnostic.data --web --view summary --avg 5m
+mongodb-ftdcstat diagnostic.data --web --from "2026-06-04T19:00:00" --to "2026-06-04T20:00:00"
 ```
 
 Behavior:
@@ -221,7 +221,7 @@ visible series values at that timestamp.
 Overrides the default local bind address used by `--web`:
 
 ```bash
-ftdcstat diagnostic.data --web --listen 127.0.0.1:8080
+mongodb-ftdcstat diagnostic.data --web --listen 127.0.0.1:8080
 ```
 
 ### `--verbose`
@@ -648,7 +648,7 @@ aqu-sz    = delta(io_queued_ms) / (interval_seconds * 1000)
 When `serverStatus.extra_info.user_time_us` and
 `serverStatus.extra_info.system_time_us` are available, `user_cpu%` and
 `system_cpu%` are normalized by the available CPU count so the process stays
-within total system capacity. If those counters are absent, `ftdcstat` falls
+within total system capacity. If those counters are absent, `mongodb-ftdcstat` falls
 back to the FTDC OS CPU split.
 
 System verbose sources:
@@ -777,5 +777,5 @@ go test ./...
 Quick smoke test:
 
 ```bash
-./ftdcstat diagnostic.data --view summary --interval 43200
+./mongodb-ftdcstat diagnostic.data --view summary --interval 43200
 ```

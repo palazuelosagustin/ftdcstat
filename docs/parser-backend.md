@@ -1,6 +1,6 @@
 # Parser backend
 
-`ftdcstat` keeps FTDC parsing behind `internal/ftdc.SampleReader`.
+`mongodb-ftdcstat` keeps FTDC parsing behind `internal/ftdc.SampleReader`.
 The default implementation is `NativeReader`, which decodes MongoDB diagnostic
 files directly from concatenated BSON records and metric chunks.
 

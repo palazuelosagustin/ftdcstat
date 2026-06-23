@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
 )
 
 type RowBucketAverager struct {
@@ -21,12 +21,12 @@ type bucketState struct {
 }
 
 type fieldState struct {
-	sum         float64
-	count       int
-	text        string
-	haveNumber  bool
-	haveText    bool
-	mixedText   bool
+	sum        float64
+	count      int
+	text       string
+	haveNumber bool
+	haveText   bool
+	mixedText  bool
 }
 
 func NewRowBucketAverager(bucket time.Duration) *RowBucketAverager {

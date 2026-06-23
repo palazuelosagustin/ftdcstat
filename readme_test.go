@@ -1,4 +1,4 @@
-package ftdcstat
+package mongodbftdcstat
 
 import (
 	"os"

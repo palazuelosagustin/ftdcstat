@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/model"
 )
 
 type FileKind string

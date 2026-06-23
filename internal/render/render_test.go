@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
 )
 
 func testMetadata() model.Metadata {

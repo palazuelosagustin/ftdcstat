@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/model"
 )
 
 func testSample(ts int64, sourceIndex int, values map[string]float64) model.MetricSample {
@@ -525,22 +525,22 @@ func TestRowsAverageMemberPingMsMissing(t *testing.T) {
 func TestRowsCalculatesNetworkMetrics(t *testing.T) {
 	rows := Rows([]model.MetricSample{
 		testSample(0, 0, map[string]float64{
-			"serverStatus.connections.current":      20,
-			"serverStatus.connections.active":       8,
-			"serverStatus.connections.totalCreated": 100,
-			"serverStatus.connections.rejected":     5,
-			"serverStatus.network.numSlowDNSOperations": 10,
-			"serverStatus.network.numSlowSSLOperations": 20,
+			"serverStatus.connections.current":                            20,
+			"serverStatus.connections.active":                             8,
+			"serverStatus.connections.totalCreated":                       100,
+			"serverStatus.connections.rejected":                           5,
+			"serverStatus.network.numSlowDNSOperations":                   10,
+			"serverStatus.network.numSlowSSLOperations":                   20,
 			"serverStatus.metrics.operation.numConnectionNetworkTimeouts": 30,
 		}),
 		testSample(10, 0, map[string]float64{
-			"serverStatus.connections.current":      21,
-			"serverStatus.connections.active":       9,
-			"serverStatus.connections.totalCreated": 115,
-			"serverStatus.connections.rejected":     7,
-			"serverStatus.connections.queuedForEstablishment": 3,
-			"serverStatus.network.numSlowDNSOperations": 14,
-			"serverStatus.network.numSlowSSLOperations": 25,
+			"serverStatus.connections.current":                            21,
+			"serverStatus.connections.active":                             9,
+			"serverStatus.connections.totalCreated":                       115,
+			"serverStatus.connections.rejected":                           7,
+			"serverStatus.connections.queuedForEstablishment":             3,
+			"serverStatus.network.numSlowDNSOperations":                   14,
+			"serverStatus.network.numSlowSSLOperations":                   25,
 			"serverStatus.metrics.operation.numConnectionNetworkTimeouts": 31,
 		}),
 	}, Options{IntervalSeconds: 1})
@@ -586,11 +586,11 @@ func TestRowsClampsIdleConnectionsToZero(t *testing.T) {
 func TestRowsResetsNetworkRatesAcrossGapAndRestart(t *testing.T) {
 	rows := Rows([]model.MetricSample{
 		testSample(0, 0, map[string]float64{
-			"serverStatus.uptime":                  100,
+			"serverStatus.uptime":                   100,
 			"serverStatus.connections.totalCreated": 100,
 		}),
 		testSample(120, 0, map[string]float64{
-			"serverStatus.uptime":                  1,
+			"serverStatus.uptime":                   1,
 			"serverStatus.connections.totalCreated": 110,
 		}),
 	}, Options{IntervalSeconds: 1, GapThreshold: 60 * time.Second})
@@ -627,14 +627,14 @@ func TestRowsApplyBufferGauges(t *testing.T) {
 func TestRowsCalculatesVerboseSystemMetrics(t *testing.T) {
 	rows := Rows([]model.MetricSample{
 		testSample(0, 0, map[string]float64{
-			"systemMetrics.cpu.ctxt":      1000,
-			"systemMetrics.vmstat.pswpin":   10,
-			"systemMetrics.vmstat.pswpout":  20,
+			"systemMetrics.cpu.ctxt":       1000,
+			"systemMetrics.vmstat.pswpin":  10,
+			"systemMetrics.vmstat.pswpout": 20,
 		}),
 		testSample(10, 0, map[string]float64{
-			"systemMetrics.cpu.ctxt":      1200,
-			"systemMetrics.vmstat.pswpin":   20,
-			"systemMetrics.vmstat.pswpout":  50,
+			"systemMetrics.cpu.ctxt":       1200,
+			"systemMetrics.vmstat.pswpin":  20,
+			"systemMetrics.vmstat.pswpout": 50,
 		}),
 	}, Options{IntervalSeconds: 1})
 	if len(rows) != 1 {
@@ -675,11 +675,11 @@ func TestRowsCalculatesPressureSystemMetrics(t *testing.T) {
 	}
 	values := rows[0].Values
 	want := map[string]float64{
-		"psiCpuSome%":  10,
-		"psiMemSome%":  20,
-		"psiMemFull%":  30,
-		"psiIoSome%":   40,
-		"psiIoFull%":   50,
+		"psiCpuSome%": 10,
+		"psiMemSome%": 20,
+		"psiMemFull%": 30,
+		"psiIoSome%":  40,
+		"psiIoFull%":  50,
 	}
 	for key, wantValue := range want {
 		if got := values[key]; got != wantValue {

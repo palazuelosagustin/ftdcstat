@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ftdcstat/internal/discovery"
-	"ftdcstat/internal/ftdc"
+	"mongodb-ftdcstat/internal/discovery"
+	"mongodb-ftdcstat/internal/ftdc"
 )
 
 func TestDiagnosticDataVerboseReplicationPathsPresent(t *testing.T) {

@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"ftdcstat/internal/aggregate"
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/discovery"
-	"ftdcstat/internal/ftdc"
-	"ftdcstat/internal/model"
-	"ftdcstat/internal/render"
-	"ftdcstat/internal/webui"
+	"mongodb-ftdcstat/internal/aggregate"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/discovery"
+	"mongodb-ftdcstat/internal/ftdc"
+	"mongodb-ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/render"
+	"mongodb-ftdcstat/internal/webui"
 )
 
 type cliOptions struct {
@@ -45,14 +45,14 @@ type captureInput struct {
 func main() {
 	opts, err := parseArgs(os.Args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
-		usage(os.Stderr)
+		printError(os.Stderr, err)
+		usage(os.Stderr, commandName())
 		os.Exit(2)
 	}
 
 	files, warnings, err := discovery.Discover(opts.Path)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
+		printError(os.Stderr, err)
 		os.Exit(1)
 	}
 	files = discovery.FilterByTimeRange(files, opts.Range)
@@ -65,7 +65,7 @@ func main() {
 	readerOpts.TimeRange = opts.Range
 	metadata, metadataWarnings, err := reader.ReadMetadataFiles(files)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
+		printError(os.Stderr, err)
 		os.Exit(1)
 	}
 	warnings = append(warnings, metadataWarnings...)
@@ -98,20 +98,20 @@ func main() {
 
 	if opts.Web {
 		if err := runWebOutput(os.Stdout, input, warnings, renderOpts, opts); err != nil {
-			fmt.Fprintln(os.Stderr, "ftdcstat:", err)
+			printError(os.Stderr, err)
 			os.Exit(1)
 		}
 		return
 	}
 	if render.NeedsBufferedRows(renderOpts) {
 		if err := runBufferedOutput(os.Stdout, input, warnings, renderOpts); err != nil {
-			fmt.Fprintln(os.Stderr, "ftdcstat:", err)
+			printError(os.Stderr, err)
 			os.Exit(1)
 		}
 		return
 	}
 	if err := runStreamingTableOutput(os.Stdout, input, warnings, renderOpts); err != nil {
-		fmt.Fprintln(os.Stderr, "ftdcstat:", err)
+		printError(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -267,7 +267,7 @@ func parseArgs(args []string) (cliOptions, error) {
 		arg := args[i]
 		switch {
 		case arg == "-h" || arg == "--help":
-			usage(os.Stdout)
+			usage(os.Stdout, commandName())
 			os.Exit(0)
 		case arg == "--json":
 			opts.JSON = true
@@ -428,8 +428,26 @@ func parseTimeArg(value string) (time.Time, error) {
 	return time.Time{}, errors.New("expected ISO-8601 timestamp")
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "usage: ftdcstat <path-to-diagnostic-data-directory> [--view server|wt|system|network|repl|summary|all] [--interval N] [--avg DURATION] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--web] [--listen ADDR] [--verbose] [--pressure]")
+func usage(w *os.File, name string) {
+	fmt.Fprintf(w, "usage: %s <path-to-diagnostic-data-directory> [--view server|wt|system|network|repl|summary|all] [--interval N] [--avg DURATION] [--device DEVICE] [--from ISO_TIME] [--to ISO_TIME] [--json] [--web] [--listen ADDR] [--verbose] [--pressure]\n", name)
+}
+
+func printError(w io.Writer, err error) {
+	fmt.Fprintf(w, "%s: %v\n", commandName(), err)
+}
+
+func commandName() string {
+	name := strings.TrimSpace(os.Args[0])
+	if name == "" {
+		return "mongodb-ftdcstat"
+	}
+	if slash := strings.LastIndexAny(name, `/\`); slash >= 0 {
+		name = name[slash+1:]
+	}
+	if name == "" || name == "." {
+		return "mongodb-ftdcstat"
+	}
+	return name
 }
 
 func max(a, b int) int {

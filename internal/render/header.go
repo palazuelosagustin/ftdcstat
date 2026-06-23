@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
 )
 
 func HeaderText(metadata model.Metadata, loc *time.Location) string {

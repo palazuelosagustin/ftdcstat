@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"ftdcstat/internal/aggregate"
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
-	"ftdcstat/internal/render"
+	"mongodb-ftdcstat/internal/aggregate"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/render"
 )
 
 //go:embed static/index.html
@@ -156,7 +156,7 @@ func NewServer(dataset Dataset) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	indexHTML := bytes.ReplaceAll(indexBytes, []byte("{{ .Title }}"), []byte(fmt.Sprintf("ftdcstat web UI - %s", dataset.Metadata.View)))
+	indexHTML := bytes.ReplaceAll(indexBytes, []byte("{{ .Title }}"), []byte(fmt.Sprintf("mongodb-ftdcstat web UI - %s", dataset.Metadata.View)))
 	metaJSON, err := marshalJSON(dataset.Metadata)
 	if err != nil {
 		return nil, err

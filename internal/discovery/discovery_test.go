@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/model"
 )
 
 func TestDiscoverOrdersRotatedMetricsAndInterimLast(t *testing.T) {

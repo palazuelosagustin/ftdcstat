@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
 )
 
 type Options struct {

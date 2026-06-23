@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/discovery"
-	"ftdcstat/internal/ftdc"
-	"ftdcstat/internal/model"
-	"ftdcstat/internal/render"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/discovery"
+	"mongodb-ftdcstat/internal/ftdc"
+	"mongodb-ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/render"
 )
 
 func TestTableOutputStreamingMatchesBatchRender(t *testing.T) {

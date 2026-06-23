@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/discovery"
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/discovery"
+	"mongodb-ftdcstat/internal/model"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

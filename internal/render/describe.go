@@ -1,8 +1,8 @@
 package render
 
 import (
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/model"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/model"
 )
 
 type MetricInfo struct {

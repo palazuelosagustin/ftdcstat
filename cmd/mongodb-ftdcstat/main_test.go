@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"ftdcstat/internal/derive"
-	"ftdcstat/internal/render"
+	"mongodb-ftdcstat/internal/derive"
+	"mongodb-ftdcstat/internal/render"
 )
 
 func TestParseArgsDefaultIntervalIsSixty(t *testing.T) {
