@@ -8,3 +8,4 @@ serverStatus.out
 replSetGetStatus
 outputs/
 testdata/
+mongodb-ftdcstat
