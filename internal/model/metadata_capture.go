@@ -10,6 +10,10 @@ type ReplMemberState struct {
 	Name  string
 }
 
+func (m Metadata) ProcessKind() string {
+	return m.processKind
+}
+
 func (m Metadata) StorageEngineName() string {
 	return m.storageEngineName
 }
@@ -38,6 +42,9 @@ func (m Metadata) compactServerStatusDoc() (map[string]any, bool) {
 
 func (m *Metadata) captureServerStatus(record MetadataRecord) {
 	m.maybeSetNetworkMaxConn(record)
+	if process := lookupMetadataString(record.Doc, "process"); process != "" {
+		m.setProcessKind(process)
+	}
 	if name := lookupMetadataString(record.Doc, "storageEngine.name"); name != "" {
 		if m.shouldPreferNewerScalar(record.Timestamp, m.storageEngineTime) {
 			m.storageEngineName = name
@@ -191,4 +198,38 @@ func firstMetadataString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func (m *Metadata) normalizeRootDocument(root map[string]any) map[string]any {
+	if common, ok := root["common"].(map[string]any); ok {
+		normalized := map[string]any{}
+		for key, value := range root {
+			if key == "common" {
+				continue
+			}
+			normalized[key] = value
+		}
+		for key, value := range common {
+			normalized[key] = value
+		}
+		root = normalized
+	}
+	if _, ok := root["router"]; ok {
+		m.setProcessKind(ProcessKindMongos)
+	}
+	if _, ok := root["serverStatus"]; ok && m.processKind == ProcessKindUnknown {
+		m.setProcessKind(ProcessKindMongod)
+	}
+	return root
+}
+
+func (m *Metadata) setProcessKind(kind string) {
+	switch kind {
+	case ProcessKindMongod:
+		if m.processKind == ProcessKindUnknown {
+			m.processKind = ProcessKindMongod
+		}
+	case ProcessKindMongos:
+		m.processKind = ProcessKindMongos
+	}
 }

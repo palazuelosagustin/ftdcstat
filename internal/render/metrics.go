@@ -28,6 +28,13 @@ var metricRegistry = []metricDefinition{
 	{Section: "replication", Column: "applyBufCnt", Format: "integer", JSONName: "applyBufCnt"},
 	{Section: "replication", Column: "applyBufMB", Format: "mib", JSONName: "applyBufMB"},
 
+	{Section: "router", Column: "shards", Format: "integer", JSONName: "shards"},
+	{Section: "router", Column: "pingMS", Format: "millis", JSONName: "pingMS"},
+	{Section: "router", Column: "helloOps/s", Format: "rate", JSONName: "helloOps/s"},
+	{Section: "router", Column: "helloMS", Format: "millis", JSONName: "helloMS"},
+	{Section: "router", Column: "ghaOps/s", Format: "rate", JSONName: "ghaOps/s"},
+	{Section: "router", Column: "ghaMS", Format: "millis", JSONName: "ghaMS"},
+
 	{Section: "system", Column: "r/s", Format: "rate", JSONName: "r/s"},
 	{Section: "system", Column: "w/s", Format: "rate", JSONName: "w/s"},
 	{Section: "system", Column: "rkB/s", Format: "rate", JSONName: "rkB/s", VerboseOnly: true},
@@ -78,6 +85,20 @@ var metricRegistry = []metricDefinition{
 	{Section: "wiredTiger", Column: "hsInsert/s", Format: "rate", JSONName: "hsInsert/s", VerboseOnly: true},
 	{Section: "wiredTiger", Column: "hsRead/s", Format: "rate", JSONName: "hsRead/s", VerboseOnly: true},
 	{Section: "wiredTiger", Column: "hsWriteMB/s", Format: "mib", JSONName: "hsWriteMB/s", VerboseOnly: true},
+
+	{Section: "connPool", Column: "clientConn", Format: "integer", JSONName: "clientConn"},
+	{Section: "connPool", Column: "scopedConn", Format: "integer", JSONName: "scopedConn"},
+	{Section: "connPool", Column: "poolInUse", Format: "integer", JSONName: "poolInUse"},
+	{Section: "connPool", Column: "poolAvail", Format: "integer", JSONName: "poolAvail"},
+	{Section: "connPool", Column: "poolCreate/s", Format: "rate", JSONName: "poolCreate/s"},
+	{Section: "connPool", Column: "poolRefresh/s", Format: "rate", JSONName: "poolRefresh/s"},
+	{Section: "connPool", Column: "taskExec/s", Format: "rate", JSONName: "taskExec/s"},
+	{Section: "connPool", Column: "leased", Format: "integer", JSONName: "leased", VerboseOnly: true},
+	{Section: "connPool", Column: "refreshing", Format: "integer", JSONName: "refreshing", VerboseOnly: true},
+	{Section: "connPool", Column: "helloAct", Format: "integer", JSONName: "helloAct", VerboseOnly: true},
+	{Section: "connPool", Column: "ghaAct", Format: "integer", JSONName: "ghaAct", VerboseOnly: true},
+	{Section: "connPool", Column: "rsmExec/s", Format: "rate", JSONName: "rsmExec/s", VerboseOnly: true},
+	{Section: "connPool", Column: "shardExec/s", Format: "rate", JSONName: "shardExec/s", VerboseOnly: true},
 }
 
 func columnsForSection(section string) []string {
@@ -99,6 +120,18 @@ func wiredTigerColumns(verbose bool) []string {
 		"wtRdMB/s", "wtWrMB/s", "evict/s", "appEvict/s", "evictWalks/s", "evictBusy/s",
 		"ckptMS", "ckptPages/s", "rdTkt", "wrTkt", "hsInsert/s", "hsRead/s", "hsWriteMB/s",
 	}
+}
+
+func connPoolColumns(verbose bool) []string {
+	cols := []string{"clientConn", "scopedConn", "poolInUse", "poolAvail", "poolCreate/s", "poolRefresh/s", "taskExec/s"}
+	if verbose {
+		cols = append(cols, "leased", "refreshing", "helloAct", "ghaAct", "rsmExec/s", "shardExec/s")
+	}
+	return cols
+}
+
+func routerColumns() []string {
+	return []string{"shards", "pingMS", "helloOps/s", "helloMS", "ghaOps/s", "ghaMS"}
 }
 
 func systemColumns(verbose bool) []string {

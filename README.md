@@ -1,7 +1,8 @@
 # mongodb-ftdcstat
 
-`mongodb-ftdcstat` reads a MongoDB `diagnostic.data` directory and prints FTDC metrics
-as terminal-friendly tables or serves a local plotting UI.
+`mongodb-ftdcstat` reads a MongoDB `diagnostic.data` directory, auto-detects
+`mongod` versus `mongos`, and prints FTDC metrics as terminal-friendly tables or
+serves a local plotting UI.
 
 ## Build
 
@@ -33,11 +34,14 @@ Views:
 
 ```text
 server   MongoDB serverStatus counters, latency, and queues
-wt       WiredTiger cache, eviction, checkpoint, and ticket metrics
+wt       `mongod`: WiredTiger cache, eviction, checkpoint, and ticket metrics
+         `mongos`: router connection-pool and executor metrics
 system   CPU, memory, and disk metrics
 network  Connection activity and network-establishment diagnostics
-repl     Replica-set lag and replication state
-summary  One wide table containing replication, server, network, system, and WiredTiger columns
+repl     `mongod`: replica-set lag and replication state
+         `mongos`: router ping and replica-set monitor metrics
+summary  `mongod`: replication, server, network, system, and WiredTiger columns
+         `mongos`: router, server, network, system, and connection-pool columns
 all      Compatibility alias for summary
 ```
 
@@ -51,12 +55,12 @@ mongodb-ftdcstat diagnostic.data --view summary | less -S
 
 It prints one wide table, one row per display interval, and repeats the compact
 section-label row plus the column header every 50 data rows. The wide table uses
-`|` separators after `datetime` and between logical `replication`, `server`,
-`network`, `system`, and `wiredTiger` groups. It avoids the old full-width dashed banner
-lines. The `--view summary` section order is:
+`|` separators after `datetime` and between logical metric groups. It avoids the
+old full-width dashed banner lines. The `--view summary` section order is:
 
 ```text
-replication | server | network | system | wiredTiger
+mongod: replication | server | network | system | wiredTiger
+mongos: router | server | network | system | connPool
 ```
 
 ### `--interval N`
@@ -228,8 +232,8 @@ mongodb-ftdcstat diagnostic.data --web --listen 127.0.0.1:8080
 
 `--verbose` expands columns for focused views only. It applies to `--view repl`,
 `--view wt`, `--view system`, and `--view network`. It does not apply to `--view summary` or
-`--view all`, which always print the compact rollup across replication, server,
-network, system, and WiredTiger.
+`--view all`, which always print the compact rollup for the detected process
+type.
 
 When used with `--view repl`, `--verbose` adds replication apply/buffer metrics
 after `majLagS`:
@@ -238,12 +242,36 @@ after `majLagS`:
 lagS node1 node2 ... nodeN majLagS hbMs applyOps/s applyBufCnt applyBufMB
 ```
 
+For `mongos`, `--view repl` remains the focused router-health view for CLI
+compatibility and prints router ping plus replica-set monitor metrics.
+
 When used with `--view wt`, `--verbose` expands the WiredTiger columns with
 cache, eviction, checkpoint, ticket, and history store diagnostics:
 
 ```text
 wtCache% dirty% cacheMB dirtyMB updatesMB wtRdMB/s wtWrMB/s evict/s appEvict/s evictWalks/s evictBusy/s ckptMS ckptPages/s rdTkt wrTkt hsInsert/s hsRead/s hsWriteMB/s
 ```
+
+For `mongos`, `--view wt` remains the focused pool/executor view for CLI
+compatibility and expands router connection-pool metrics instead of storage
+metrics.
+
+### Reading `mongos` Disk Metrics
+
+For `mongos`, disk columns in `--view system` and `--view summary` come from
+host-level FTDC `systemMetrics.disks.*` counters. They do not mean `mongos`
+has a local storage engine or persists collection data like `mongod`.
+
+Read them as machine-level IO pressure that may include:
+
+- temporary spill activity from sorts or aggregation stages
+- log writes
+- swap activity
+- IO from other colocated processes
+
+That makes the disk metrics useful for `mongos`, but only as indirect signal.
+High IO can point to spill-heavy router work or host contention; by itself it
+does not prove that `mongos` is writing database files.
 
 When used with `--view system`, `--verbose` adds disk throughput, context switch
 rate, and swap activity after the default system columns:

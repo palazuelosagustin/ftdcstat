@@ -61,13 +61,13 @@ func main() {
 	}
 
 	reader := ftdc.NewNativeReader()
-	readerOpts := ftdc.ReaderOptionsFor(opts.View, opts.Verbose, opts.Pressure)
-	readerOpts.TimeRange = opts.Range
 	metadata, metadataWarnings, err := reader.ReadMetadataFiles(files)
 	if err != nil {
 		printError(os.Stderr, err)
 		os.Exit(1)
 	}
+	readerOpts := ftdc.ReaderOptionsForKind(metadata.ProcessKind(), opts.View, opts.Verbose, opts.Pressure)
+	readerOpts.TimeRange = opts.Range
 	warnings = append(warnings, metadataWarnings...)
 	for _, warning := range metadataWarnings {
 		fmt.Fprintln(os.Stderr, "warning:", warning.String())

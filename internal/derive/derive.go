@@ -101,13 +101,22 @@ func (s *Streamer) Add(cur model.MetricSample) (Row, bool) {
 		row.ProcessMarker = processMarker("restart detected", cur, s.opts.TimeLocation)
 	}
 	reset := row.Marker != "" || restarted
-	fillSummary(&row, calc, reset)
-	fillWT(&row, calc, reset)
-	fillMemoryLatencyConnections(&row, calc, reset)
-	fillNetwork(&row, calc, reset)
-	fillCPU(&row, calc, s.opts, reset)
-	fillDisk(&row, calc, s.opts.Device, reset)
-	fillReplication(&row, calc, s.replMembers, reset)
+	if s.opts.Metadata.ProcessKind() == model.ProcessKindMongos {
+		fillSummary(&row, calc, reset)
+		fillMemoryLatencyConnections(&row, calc, reset)
+		fillNetwork(&row, calc, reset)
+		fillCPU(&row, calc, s.opts, reset)
+		fillDisk(&row, calc, s.opts.Device, reset)
+		fillMongosRouter(&row, calc, reset)
+	} else {
+		fillSummary(&row, calc, reset)
+		fillWT(&row, calc, reset)
+		fillMemoryLatencyConnections(&row, calc, reset)
+		fillNetwork(&row, calc, reset)
+		fillCPU(&row, calc, s.opts, reset)
+		fillDisk(&row, calc, s.opts.Device, reset)
+		fillReplication(&row, calc, s.replMembers, reset)
+	}
 	s.lastRendered = cur.Time
 	return row, true
 }
@@ -520,6 +529,44 @@ func fillReplication(row *Row, c calculator, members *replMemberRegistry, reset 
 	row.Values["rsState"] = rsState(c.cur)
 }
 
+func fillMongosRouter(row *Row, c calculator, reset bool) {
+	pingCount, pingAvg := mongosPingSummary(c.cur)
+	if pingCount > 0 {
+		row.Values["shards"] = float64(pingCount)
+		row.Values["pingMS"] = pingAvg
+	}
+	setCurrent(row, "clientConn", c, "router.connPoolStats.numClientConnections")
+	setCurrent(row, "scopedConn", c, "router.connPoolStats.numAScopedConnections")
+	setCurrent(row, "poolInUse", c, "router.connPoolStats.totalInUse")
+	setCurrent(row, "poolAvail", c, "router.connPoolStats.totalAvailable")
+	setCurrent(row, "leased", c, "router.connPoolStats.totalLeased")
+	setCurrent(row, "refreshing", c, "router.connPoolStats.totalRefreshing")
+	setCurrent(row, "helloAct", c, "router.connPoolStats.replicaSetMonitor.hello.currentlyActive")
+	setCurrent(row, "ghaAct", c, "router.connPoolStats.replicaSetMonitor.getHostAndRefresh.currentlyActive")
+	if reset {
+		return
+	}
+	setRate(row, "poolCreate/s", c, "router.connPoolStats.totalCreated")
+	setRate(row, "poolRefresh/s", c, "router.connPoolStats.totalRefreshed")
+	setRate(row, "helloOps/s", c, "router.connPoolStats.replicaSetMonitor.hello.totalCalls")
+	setRate(row, "ghaOps/s", c, "router.connPoolStats.replicaSetMonitor.getHostAndRefresh.totalCalls")
+	if avg, ok := latencyAverageMillis(c, "router.connPoolStats.replicaSetMonitor.hello.totalLatencyMicros", "router.connPoolStats.replicaSetMonitor.hello.totalCalls"); ok {
+		row.Values["helloMS"] = avg
+	}
+	if avg, ok := latencyAverageMillis(c, "router.connPoolStats.replicaSetMonitor.getHostAndRefresh.totalLatencyMicros", "router.connPoolStats.replicaSetMonitor.getHostAndRefresh.totalCalls"); ok {
+		row.Values["ghaMS"] = avg
+	}
+	if rate, ok := matchedRateSum(c, "router.networkInterfaceStats.", ".executed"); ok {
+		row.Values["taskExec/s"] = rate
+	}
+	if rate, ok := c.rate("router.networkInterfaceStats.ReplicaSetMonitor-TaskExecutor.executed"); ok {
+		row.Values["rsmExec/s"] = rate
+	}
+	if rate, ok := c.rate("router.networkInterfaceStats.ShardRegistry.executed"); ok {
+		row.Values["shardExec/s"] = rate
+	}
+}
+
 func averageMemberPingMs(sample model.MetricSample) (float64, bool) {
 	var sum float64
 	var count int
@@ -562,7 +609,11 @@ func processMarker(event string, sample model.MetricSample, loc *time.Location) 
 	if pid == "-" && start == "-" {
 		return ""
 	}
-	return fmt.Sprintf("--- mongod %s: pid=%s start=%s ---", event, pid, start)
+	process := "mongod"
+	if kind := sampleKind(sample); kind != "" {
+		process = kind
+	}
+	return fmt.Sprintf("--- %s %s: pid=%s start=%s ---", process, event, pid, start)
 }
 
 func processStart(sample model.MetricSample, loc *time.Location) string {
@@ -576,6 +627,15 @@ func processStart(sample model.MetricSample, loc *time.Location) string {
 		return sample.Time.Add(-time.Duration(v) * time.Second).In(loc).Format(time.RFC3339)
 	}
 	return "-"
+}
+
+func sampleKind(sample model.MetricSample) string {
+	for path := range sample.Values {
+		if strings.HasPrefix(path, "router.") {
+			return model.ProcessKindMongos
+		}
+	}
+	return ""
 }
 
 func rsState(sample model.MetricSample) string {
@@ -615,6 +675,51 @@ func normalizeRSState(state int) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+func latencyAverageMillis(c calculator, totalLatencyPath, totalCallsPath string) (float64, bool) {
+	latency, ok := c.delta(totalLatencyPath)
+	if !ok {
+		return 0, false
+	}
+	calls, ok := c.delta(totalCallsPath)
+	if !ok || calls <= 0 {
+		return 0, false
+	}
+	return latency / calls / 1000, true
+}
+
+func mongosPingSummary(sample model.MetricSample) (int, float64) {
+	var sum float64
+	var count int
+	for path, value := range sample.Values {
+		if !strings.HasPrefix(path, "router.connPoolStats.replicaSetPingTimesMillis.") {
+			continue
+		}
+		sum += value
+		count++
+	}
+	if count == 0 {
+		return 0, 0
+	}
+	return count, sum / float64(count)
+}
+
+func matchedRateSum(c calculator, prefix, suffix string) (float64, bool) {
+	var total float64
+	var found bool
+	for path := range c.cur.Values {
+		if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+			continue
+		}
+		rate, ok := c.rate(path)
+		if !ok {
+			continue
+		}
+		total += rate
+		found = true
+	}
+	return total, found
 }
 
 func setCurrent(row *Row, key string, c calculator, path string) {

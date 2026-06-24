@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,13 +109,111 @@ func TestStreamMetricsRangeMatchesDerivedRows(t *testing.T) {
 	}
 }
 
+func TestMongosViewsRenderRouterAndConnPoolSections(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "mongos.diagnostic.data")
+	if _, err := os.Stat(root); err != nil {
+		t.Skip("mongos.diagnostic.data sample directory not present")
+	}
+	files, _, err := discovery.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) > 3 {
+		files = files[:3]
+	}
+
+	rows, metadata, err := deriveRows(files, "summary", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.ProcessKind() != model.ProcessKindMongos {
+		t.Fatalf("processKind=%q", metadata.ProcessKind())
+	}
+
+	var summary bytes.Buffer
+	if err := render.Render(&summary, metadata, nil, rows, render.Options{View: "summary", TimeLocation: time.UTC}); err != nil {
+		t.Fatal(err)
+	}
+	summaryOut := summary.String()
+	for _, want := range []string{"|                     router", "|                                    connPool", "--- mongos process:"} {
+		if !strings.Contains(summaryOut, want) {
+			t.Fatalf("summary output missing %q:\n%s", want, summaryOut)
+		}
+	}
+	for _, forbidden := range []string{"|     replication", "|                               wiredTiger"} {
+		if strings.Contains(summaryOut, forbidden) {
+			t.Fatalf("summary output should not contain %q:\n%s", forbidden, summaryOut)
+		}
+	}
+
+	var repl bytes.Buffer
+	if err := render.Render(&repl, metadata, nil, rows, render.Options{View: "repl", TimeLocation: time.UTC}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(repl.String(), "|                     router") {
+		t.Fatalf("repl output should render router section:\n%s", repl.String())
+	}
+
+	var wt bytes.Buffer
+	if err := render.Render(&wt, metadata, nil, rows, render.Options{View: "wt", TimeLocation: time.UTC}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(wt.String(), "|                                    connPool") {
+		t.Fatalf("wt output should render connPool section for mongos:\n%s", wt.String())
+	}
+}
+
+func TestMongosSummaryJSONUsesRouterAndConnPoolSections(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "mongos.diagnostic.data")
+	if _, err := os.Stat(root); err != nil {
+		t.Skip("mongos.diagnostic.data sample directory not present")
+	}
+	files, _, err := discovery.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) > 3 {
+		files = files[:3]
+	}
+	rows, metadata, err := deriveRows(files, "summary", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := render.RenderJSON(&buf, metadata, nil, rows, render.Options{View: "summary", JSON: true, TimeLocation: time.UTC}); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	rowsJSON := payload["rows"].([]any)
+	if len(rowsJSON) == 0 {
+		t.Fatal("expected rows in summary JSON")
+	}
+	first := rowsJSON[0].(map[string]any)
+	if _, ok := first["router"]; !ok {
+		t.Fatalf("summary JSON missing router section: %#v", first)
+	}
+	if _, ok := first["connPool"]; !ok {
+		t.Fatalf("summary JSON missing connPool section: %#v", first)
+	}
+	if _, ok := first["replication"]; ok {
+		t.Fatalf("summary JSON should not contain replication section for mongos: %#v", first)
+	}
+	if _, ok := first["wiredTiger"]; ok {
+		t.Fatalf("summary JSON should not contain wiredTiger section for mongos: %#v", first)
+	}
+}
+
 func deriveRows(files []discovery.MetricFile, view string, verbose, pressure bool) ([]derive.Row, model.Metadata, error) {
 	reader := ftdc.NewNativeReader()
-	readerOpts := ftdc.ReaderOptionsFor(view, verbose, pressure)
 	metadata, _, err := reader.ReadMetadataFiles(files)
 	if err != nil {
 		return nil, model.Metadata{}, err
 	}
+	readerOpts := ftdc.ReaderOptionsForKind(metadata.ProcessKind(), view, verbose, pressure)
 	streamer := derive.NewStreamer(derive.Options{
 		IntervalSeconds: 60,
 		GapThreshold:    600 * time.Second,

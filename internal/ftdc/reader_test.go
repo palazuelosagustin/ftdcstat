@@ -253,6 +253,45 @@ func TestStreamFilesMatchesReadFiles(t *testing.T) {
 	}
 }
 
+func TestMongosDiagnosticDataCanonicalizesCommonMetrics(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "mongos.diagnostic.data")
+	if _, err := os.Stat(root); err != nil {
+		t.Skip("mongos.diagnostic.data sample directory not present")
+	}
+	files, _, err := discovery.Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := NewNativeReader()
+	metadata, _, err := reader.ReadMetadataFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.ProcessKind() != model.ProcessKindMongos {
+		t.Fatalf("processKind=%q", metadata.ProcessKind())
+	}
+	opts := ReaderOptions{IncludePrefixes: []string{""}, MaxSamples: 3, ProcessKind: metadata.ProcessKind()}
+	capture, err := reader.ReadFiles(files[:1], opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(capture.Samples) == 0 {
+		t.Fatal("no samples decoded from mongos diagnostic data")
+	}
+	sample := capture.Samples[0]
+	if _, ok := sample.Values["serverStatus.connections.current"]; !ok {
+		t.Fatalf("missing canonical serverStatus path in sample: %#v", sample.Values)
+	}
+	for key := range sample.Values {
+		if len(key) >= len("common.") && key[:len("common.")] == "common." {
+			t.Fatalf("unexpected raw common.* metric path after canonicalization: %q", key)
+		}
+	}
+	if _, ok := sample.Values["router.connPoolStats.totalInUse"]; !ok {
+		t.Fatalf("missing router metric in sample: %#v", sample.Values)
+	}
+}
+
 func buildChunkPayload(t testing.TB, ref bson.D, deltas map[string][]int64) []byte {
 	t.Helper()
 	refRaw, err := bson.Marshal(ref)

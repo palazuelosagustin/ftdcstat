@@ -91,3 +91,29 @@ func TestSummaryUsesCompactServerStatus(t *testing.T) {
 		t.Fatalf("compact summary should not retain full connections map: %#v", status)
 	}
 }
+
+func TestCommonRootDetectsMongosAndUnwrapsServerStatus(t *testing.T) {
+	m := NewMetadata()
+	m.AddDocument(time.Unix(0, 0), "chunk", map[string]any{
+		"common": map[string]any{
+			"serverStatus": map[string]any{
+				"process": "mongos",
+				"connections": map[string]any{
+					"current":   32,
+					"available": 65504,
+				},
+			},
+		},
+		"router": map[string]any{
+			"connPoolStats": map[string]any{
+				"totalInUse": 3,
+			},
+		},
+	})
+	if got := m.ProcessKind(); got != ProcessKindMongos {
+		t.Fatalf("processKind=%q", got)
+	}
+	if got := m.NetworkMaxConnDisplay(); got != "65536" {
+		t.Fatalf("maxConn=%q", got)
+	}
+}

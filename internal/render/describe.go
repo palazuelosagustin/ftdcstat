@@ -25,7 +25,7 @@ type ViewDescription struct {
 func DescribeView(metadata model.Metadata, rows []derive.Row, opts Options) ViewDescription {
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
 	nodeLabels := replicationNodeLabels(rsInfo, rows)
-	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure)
+	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure, metadata.ProcessKind())
 	sections := make([]ViewSection, 0, len(layout.Sections))
 	for _, section := range layout.Sections {
 		if section.Start < 0 || section.End > len(layout.Columns) || section.End < section.Start {

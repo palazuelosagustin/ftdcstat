@@ -33,6 +33,7 @@ type ReaderOptions struct {
 	IncludePaths       map[string]bool
 	IncludePrefixes    []string
 	VerboseReplication bool
+	ProcessKind        string
 	MaxSamples         int
 	TimeRange          model.TimeRange
 }
@@ -44,15 +45,20 @@ func NewNativeReader() NativeReader {
 }
 
 func DefaultReaderOptions() ReaderOptions {
-	return ReaderOptionsFor("summary", false, false)
+	return ReaderOptionsForKind(model.ProcessKindMongod, "summary", false, false)
 }
 
 func ReaderOptionsFor(view string, verbose, pressure bool) ReaderOptions {
-	paths, prefixes := derive.RequiredPathsFor(view, verbose, pressure)
+	return ReaderOptionsForKind(model.ProcessKindMongod, view, verbose, pressure)
+}
+
+func ReaderOptionsForKind(processKind, view string, verbose, pressure bool) ReaderOptions {
+	paths, prefixes := derive.RequiredPathsForProcess(processKind, view, verbose, pressure)
 	return ReaderOptions{
 		IncludePaths:       paths,
 		IncludePrefixes:    prefixes,
 		VerboseReplication: derive.ViewNeedsVerboseReplication(view, verbose),
+		ProcessKind:        processKind,
 	}
 }
 
@@ -692,7 +698,8 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 
 	keepCount := 0
 	for _, metric := range metrics {
-		if derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes, opts.VerboseReplication) {
+		path := canonicalMetricPath(metric.Path, opts.ProcessKind)
+		if derive.Interesting(path, opts.IncludePaths, opts.IncludePrefixes, opts.VerboseReplication) {
 			keepCount++
 		}
 	}
@@ -702,10 +709,11 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 	reader := bytes.NewReader(block[offset:])
 	zeroRun := int64(0)
 	for _, metric := range metrics {
-		keep := derive.Interesting(metric.Path, opts.IncludePaths, opts.IncludePrefixes, opts.VerboseReplication)
+		path := canonicalMetricPath(metric.Path, opts.ProcessKind)
+		keep := derive.Interesting(path, opts.IncludePaths, opts.IncludePrefixes, opts.VerboseReplication)
 		current := metric.Value
 		if keep {
-			setSampleValue(sampleFields, 0, metric.Path, float64(current), keepCount)
+			setSampleValue(sampleFields, 0, path, float64(current), keepCount)
 		}
 		for i := uint32(0); i < deltaCount; i++ {
 			var delta int64
@@ -726,7 +734,7 @@ func decodeMetricChunk(payload []byte, source string, sourceIndex int, opts Read
 			}
 			current += delta
 			if keep {
-				setSampleValue(sampleFields, int(i)+1, metric.Path, float64(current), keepCount)
+				setSampleValue(sampleFields, int(i)+1, path, float64(current), keepCount)
 			}
 		}
 	}
@@ -854,6 +862,26 @@ func readSignedVarint(reader *bytes.Reader) (int64, error) {
 		if i > 9 {
 			return 0, errors.New("varint overflow")
 		}
+	}
+}
+
+func canonicalMetricPath(path, processKind string) string {
+	if processKind != model.ProcessKindMongos {
+		return path
+	}
+	switch {
+	case path == "common.start":
+		return "start"
+	case path == "common.end":
+		return "end"
+	case strings.HasPrefix(path, "common.serverStatus."):
+		return strings.TrimPrefix(path, "common.")
+	case strings.HasPrefix(path, "common.systemMetrics."):
+		return strings.TrimPrefix(path, "common.")
+	case strings.HasPrefix(path, "common.transportLayerStats."):
+		return strings.TrimPrefix(path, "common.")
+	default:
+		return path
 	}
 }
 

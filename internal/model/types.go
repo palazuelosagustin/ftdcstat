@@ -98,6 +98,7 @@ type Metadata struct {
 	Latest              map[string]MetadataRecord   `json:"latest,omitempty"`
 	History             map[string][]MetadataRecord `json:"-"`
 	Warnings            []Warning                   `json:"warnings,omitempty"`
+	processKind         string
 	networkMaxConn      string
 	networkMaxConnTime  time.Time
 	haveNetworkMaxConn  bool
@@ -108,6 +109,12 @@ type Metadata struct {
 	replMemberByName    map[string]string
 	replNextLabel       int
 }
+
+const (
+	ProcessKindUnknown = ""
+	ProcessKindMongod  = "mongod"
+	ProcessKindMongos  = "mongos"
+)
 
 func NewMetadata() Metadata {
 	return Metadata{
@@ -134,6 +141,7 @@ func (m *Metadata) AddDocument(ts time.Time, source string, doc any) {
 			root = innerMap
 		}
 	}
+	root = m.normalizeRootDocument(root)
 	for name, value := range root {
 		child, ok := ToPlain(value).(map[string]any)
 		if !ok {

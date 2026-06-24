@@ -6,6 +6,18 @@ func RequiredPaths() (map[string]bool, []string) {
 	return RequiredPathsFor("", false, false)
 }
 
+func RequiredPathsForProcess(processKind, view string, verbose, pressure bool) (map[string]bool, []string) {
+	paths, prefixes := RequiredPathsFor(view, verbose, pressure)
+	if processKind != "mongos" {
+		return paths, prefixes
+	}
+	for _, path := range mongosExactRequiredPaths(view, verbose) {
+		paths[path] = true
+	}
+	prefixes = append(prefixes, mongosRequiredPrefixes(view, verbose)...)
+	return paths, prefixes
+}
+
 func ViewNeedsVerboseReplication(view string, verbose bool) bool {
 	if !verbose {
 		return false
@@ -65,6 +77,49 @@ func RequiredPathsFor(view string, verbose, pressure bool) (map[string]bool, []s
 		}
 	}
 	return paths, append([]string(nil), requiredPrefixes...)
+}
+
+func mongosExactRequiredPaths(view string, verbose bool) []string {
+	paths := []string{
+		"router.connPoolStats.totalAvailable",
+		"router.connPoolStats.totalCreated",
+		"router.connPoolStats.totalInUse",
+		"router.connPoolStats.totalLeased",
+		"router.connPoolStats.totalRefreshed",
+		"router.connPoolStats.totalRefreshing",
+		"router.connPoolStats.numAScopedConnections",
+		"router.connPoolStats.numClientConnections",
+		"router.connPoolStats.replicaSetMonitor.hello.currentlyActive",
+		"router.connPoolStats.replicaSetMonitor.hello.totalCalls",
+		"router.connPoolStats.replicaSetMonitor.hello.totalLatencyMicros",
+		"router.connPoolStats.replicaSetMonitor.getHostAndRefresh.currentlyActive",
+		"router.connPoolStats.replicaSetMonitor.getHostAndRefresh.totalCalls",
+		"router.connPoolStats.replicaSetMonitor.getHostAndRefresh.totalLatencyMicros",
+	}
+	if view == "summary" || view == "all" || view == "wt" {
+		paths = append(paths,
+			"router.networkInterfaceStats.TaskExecutorPool-0.executed",
+			"router.networkInterfaceStats.ShardRegistry.executed",
+			"router.networkInterfaceStats.ReplicaSetMonitor-TaskExecutor.executed",
+		)
+	}
+	if verbose && view == "wt" {
+		paths = append(paths,
+			"router.connPoolStats.numReplicaSetMonitorsCreated",
+			"router.connPoolStats.totalWasNeverUsed",
+			"router.connPoolStats.totalWasUsedOnce",
+		)
+	}
+	return paths
+}
+
+func mongosRequiredPrefixes(view string, verbose bool) []string {
+	var prefixes []string
+	if view == "summary" || view == "all" || view == "repl" {
+		prefixes = append(prefixes, "router.connPoolStats.replicaSetPingTimesMillis.")
+	}
+	_ = verbose
+	return prefixes
 }
 
 func Interesting(path string, exact map[string]bool, prefixes []string, verboseReplication bool) bool {

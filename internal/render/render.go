@@ -66,7 +66,7 @@ func Render(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows
 
 func RenderJSON(w io.Writer, metadata model.Metadata, warnings []model.Warning, rows []derive.Row, opts Options) error {
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
-	layout := layoutForView(opts.View, replicationNodeLabels(rsInfo, rows), opts.Verbose, opts.Pressure)
+	layout := layoutForView(opts.View, replicationNodeLabels(rsInfo, rows), opts.Verbose, opts.Pressure, metadata.ProcessKind())
 	payload := map[string]any{
 		"metadata": metadata.Summary(),
 		"rsInfo":   rsInfoForJSON(rsInfo),
@@ -83,7 +83,7 @@ func RenderJSON(w io.Writer, metadata model.Metadata, warnings []model.Warning, 
 func renderTableRows(w io.Writer, metadata model.Metadata, rows []derive.Row, opts Options) error {
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
 	nodeLabels := replicationNodeLabels(rsInfo, rows)
-	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure)
+	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure, metadata.ProcessKind())
 	loc := opts.TimeLocation
 	if loc == nil {
 		loc = time.UTC
@@ -99,7 +99,41 @@ func renderTableRows(w io.Writer, metadata model.Metadata, rows []derive.Row, op
 	return renderer.Close()
 }
 
-func layoutForView(view string, nodeLabels []string, verbose, pressure bool) tableLayout {
+func layoutForView(view string, nodeLabels []string, verbose, pressure bool, processKind string) tableLayout {
+	if processKind == model.ProcessKindMongos {
+		switch view {
+		case "server":
+			return buildLayout(nil, []namedColumns{{Name: "server", Columns: columnsForSection("server")}})
+		case "network":
+			return buildLayout(nil, []namedColumns{{Name: "network", Columns: networkColumns(verbose)}})
+		case "system", "disk":
+			sections := []namedColumns{{Name: "system", Columns: systemColumns(verbose)}}
+			if pressure {
+				sections = append(sections, namedColumns{Name: "pressure", Columns: pressureColumns()})
+			}
+			return buildLayout(nil, sections)
+		case "wt":
+			return buildLayout(nil, []namedColumns{{Name: "connPool", Columns: connPoolColumns(verbose)}})
+		case "repl":
+			return buildLayout(nil, []namedColumns{{Name: "router", Columns: routerColumns()}})
+		case "summary", "all":
+			return buildLayout(nil, []namedColumns{
+				{Name: "router", Columns: routerColumns()},
+				{Name: "server", Columns: columnsForSection("server")},
+				{Name: "network", Columns: networkColumns(verbose)},
+				{Name: "system", Columns: systemColumns(verbose)},
+				{Name: "connPool", Columns: connPoolColumns(false)},
+			})
+		default:
+			return buildLayout(nil, []namedColumns{
+				{Name: "router", Columns: routerColumns()},
+				{Name: "server", Columns: columnsForSection("server")},
+				{Name: "network", Columns: networkColumns(verbose)},
+				{Name: "system", Columns: systemColumns(verbose)},
+				{Name: "connPool", Columns: connPoolColumns(false)},
+			})
+		}
+	}
 	replVerbose := verbose && view == "repl"
 	switch view {
 	case "server":
@@ -563,7 +597,7 @@ func NewStreamingRenderer(w io.Writer, metadata model.Metadata, opts Options) (*
 	}
 	rsInfo := derive.ReplSetInfoFromMetadata(metadata)
 	nodeLabels := replicationNodeLabels(rsInfo, nil)
-	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure)
+	layout := layoutForView(opts.View, nodeLabels, opts.Verbose, opts.Pressure, metadata.ProcessKind())
 	loc := opts.TimeLocation
 	if loc == nil {
 		loc = time.UTC
